@@ -1,0 +1,6 @@
+board:
+  name: pilsPlatine
+  full_name: pilsPlatine
+  vendor: meppenSouthEngineering
+  socs:
+  - name: nrf52832
