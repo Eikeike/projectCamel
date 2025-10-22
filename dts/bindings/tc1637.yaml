@@ -1,0 +1,16 @@
+description: GPIO pins to use with a TC1637 7-seg display driver
+
+compatible: "tm1637-gpio"
+
+properties:
+  clk-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      The GPIO connected to the CLK Pin of the TC1637 driver
+
+  dio-gpios:
+    type: phandle-array
+    required: true
+    description: |
+      The GPIO connected to the DIO Pin of the TC1637 driver 

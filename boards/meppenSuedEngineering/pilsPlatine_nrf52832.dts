@@ -16,11 +16,7 @@
 	compatible = "meppenSuedEngineering,pilsPlatine-nrf52832";
 
 	chosen {
-		zephyr,shell-uart = &uart0;
 		zephyr,console = &uart0;
-		zephyr,uart-mcumgr = &uart0;
-		zephyr,bt-mon-uart = &uart0;
-		zephyr,bt-c2h-uart = &uart0;
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
@@ -34,16 +30,21 @@
 		};
 	};
 
+	tm1637: tm1637 {
+	compatible = "tm1637-gpio";
+	clk-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+	dio-gpios = <&gpio0 16 GPIO_ACTIVE_HIGH>;
+    };
 
 	buttons {
 		compatible = "gpio-keys";
 		button0: button_0 {
-			gpios = <&gpio0 14 (GPIO_PULL_UP | GPIO_ACTIVE_HIGH)>;
+			gpios = <&gpio0 14 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 			label = "Bluetooth Pairing Button";
 			zephyr,code = <INPUT_KEY_0>;
 		};
 		button1: button_1 {
-			gpios = <&gpio0 15 (GPIO_PULL_UP | GPIO_ACTIVE_HIGH)>;
+			gpios = <&gpio0 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 			label = "Ready Status Button";
 			zephyr,code = <INPUT_KEY_1>;
 		};
@@ -61,15 +62,18 @@
 	/* These aliases are provided for compatibility with samples */
 	aliases {
 		led0 = &led0;
-		sw0 = &button0;
-		sw1 = &button1;
+		buttonpairing = &button0;
+		buttonrdy = &button1;
+		buttontest = &button2;
 		mcuboot-button0 = &button0;
-        mcuboot-led0 = &led0;
+		hw-timer = &timer2;
 	};
 };
 
 &uicr {
 	gpio-as-nreset;
+	nfct-pins-as-gpios;
+
 };
 
 &gpiote {
@@ -78,6 +82,15 @@
 
 &gpio0 {
 	status = "okay";
+};
+
+&timer2 {
+	status = "okay";
+	max-bit-width = <32>;
+	prescaler = <7>;
+	counter {
+		status = "okay";
+	};
 };
 
 &uart0 {
