@@ -19,6 +19,7 @@ typedef enum {
     STATE_RUNNING,
     STATE_ERROR,
     STATE_SENDING,
+    STATE_CALIBRATING,
     STATE_MAX
 } StateID_t;
 
@@ -51,6 +52,10 @@ uint8_t SendingEntry(void);
 uint8_t SendingRun(void);
 uint8_t SendingExit(void);
 
+uint8_t CalibEntry(void);
+uint8_t CalibRun(void);
+uint8_t CalibExit(void);
+
 uint8_t ErrorEntry(void);
 uint8_t ErrorRun(void);
 uint8_t ErrorExit(void);
@@ -64,6 +69,7 @@ typedef struct {
     StateID_t requestStateDeferred;
     int error;
     struct k_mutex lock;
+    uint16_t period_ms;
 } StateMachine_t;
 
 

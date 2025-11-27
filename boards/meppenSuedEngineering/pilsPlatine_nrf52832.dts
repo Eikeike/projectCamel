@@ -38,20 +38,18 @@
 
 	buttons {
 		compatible = "gpio-keys";
+		debounce-interval-ms = <1>;
 		button0: button_0 {
 			gpios = <&gpio0 14 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 			label = "Bluetooth Pairing Button";
-			zephyr,code = <INPUT_KEY_0>;
 		};
 		button1: button_1 {
 			gpios = <&gpio0 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
 			label = "Ready Status Button";
-			zephyr,code = <INPUT_KEY_1>;
 		};
 		button2: button_2 {
 			gpios = <&gpio0 29 (GPIO_ACTIVE_HIGH)>;
 			label = "Sensor Input";
-			zephyr,code = <INPUT_KEY_2>;
 		};
 		button3: button_3 {
             label = "DFU button";

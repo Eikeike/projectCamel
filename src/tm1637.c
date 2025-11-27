@@ -108,7 +108,13 @@ int tm1637_init(void)
     printk("Set up CLK at %s pin %d\n", clk.port->name, clk.pin);
     printk("Set up DIO at %s pin %d\n", dio.port->name, dio.pin);
 
-    /* command1: auto increment */
+    tm1637_display_off();
+    return TM1637_OK;
+}
+
+void tm1637_display_off()
+{
+     /* command1: auto increment */
     tm1637_start();
     tm1637_write_byte(TM1637_CMD_AUTO_ADDR_INCR);
     tm1637_stop();
@@ -121,18 +127,18 @@ int tm1637_init(void)
     tm1637_start();
     tm1637_write_byte(TM1637_CMD_DISPLAY_OFF);
     tm1637_stop();
-    return TM1637_OK;
 }
 
-void tm1637_display_digits(uint8_t digits[], uint8_t brightness, uint8_t dot_at)
+
+void tm1637_display_digits(uint8_t digits[], uint8_t num_digits, uint8_t brightness, uint8_t dot_at)
 {
-    if (brightness >= 7)
+    if (brightness > 7)
     {
         brightness = 7;
     }
-    if (dot_at >= 3)
+    if (num_digits > 4)
     {
-        dot_at = 3;
+        num_digits = 4;
     }
     /* command1: auto increment */
     tm1637_start();
@@ -142,7 +148,7 @@ void tm1637_display_digits(uint8_t digits[], uint8_t brightness, uint8_t dot_at)
     /* command2: set starting address (0xC0) */
     tm1637_start();
     tm1637_write_byte(TM1637_CMD_SET_START_ADDR);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < num_digits; i++) {
         uint8_t seg = digit_to_segment[digits[i] % 10];
         if (i == dot_at)
         {
@@ -159,15 +165,16 @@ void tm1637_display_digits(uint8_t digits[], uint8_t brightness, uint8_t dot_at)
 }
 
 
-void tm1637_display_ready(uint8_t brightness)
+static void tm1637_display_letters(uint8_t *letters, uint8_t num_letters, uint8_t brightness)
 {
     if (brightness >= 7)
     {
         brightness = 7;
     }
-    uint8_t letter_r = 0b00110001;
-    uint8_t letter_d = 0b01011110;
-    uint8_t letter_y = 0b01101110;
+    if (num_letters > 4)
+    {
+        num_letters = 4;
+    }
 
     /* command1: auto increment */
     tm1637_start();
@@ -177,9 +184,10 @@ void tm1637_display_ready(uint8_t brightness)
     /* command2: set starting address (0xC0) */
     tm1637_start();
     tm1637_write_byte(TM1637_CMD_SET_START_ADDR);
-    tm1637_write_byte(letter_r);
-    tm1637_write_byte(letter_d);
-    tm1637_write_byte(letter_y);
+    for (uint8_t idx = 0; idx++; idx < num_letters)
+    {
+        tm1637_write_byte(letters[idx]);
+    }
     tm1637_write_byte(TM1637_BYTE_EMPTY_SEG);
     tm1637_stop();
 
@@ -187,34 +195,74 @@ void tm1637_display_ready(uint8_t brightness)
     tm1637_start();
     tm1637_write_byte(TM1637_CMD_SET_BRIGHT | (brightness & 0x07));
     tm1637_stop();
+} 
+
+
+void tm1637_display_ready(uint8_t brightness)
+{
+
+    uint8_t letter_r = 0b00110001;
+    uint8_t letter_d = 0b01011110;
+    uint8_t letter_y = 0b01101110;
+    uint8_t letters[] = {
+        letter_r,
+        letter_d,
+        letter_y
+    };
+
+   tm1637_display_letters(letters, 3, brightness);
 }
 
 
 void tm1637_display_error_message(uint8_t brightness)
 {
+    uint8_t letter_E = 0b01111001;
+    uint8_t letter_r = 0b00110001;
+
+    uint8_t letters[] = {
+        letter_E,
+        letter_r,
+        letter_r
+    };
+    tm1637_display_letters(letters, 3, brightness);
+}
+
+
+void tm1637_display_bier(uint8_t brightness)
+{
     if (brightness >= 7)
     {
         brightness = 7;
     }
+    uint8_t letter_b = 0b01111100;
+    uint8_t letter_I = 0b00000110;
     uint8_t letter_E = 0b01111001;
     uint8_t letter_r = 0b00110001;
 
-    /* command1: auto increment */
-    tm1637_start();
-    tm1637_write_byte(TM1637_CMD_AUTO_ADDR_INCR);
-    tm1637_stop();
+    uint8_t letters[] = {
+        letter_b,
+        letter_I,
+        letter_E,
+        letter_r
+    };
+    tm1637_display_letters(letters, 4, brightness);
+}
 
-    /* command2: set starting address (0xC0) */
-    tm1637_start();
-    tm1637_write_byte(TM1637_CMD_SET_START_ADDR);
-    tm1637_write_byte(letter_E);
-    tm1637_write_byte(letter_r);
-    tm1637_write_byte(letter_r);
-    tm1637_write_byte(TM1637_BYTE_EMPTY_SEG);
-    tm1637_stop();
 
-    /* command3: brightness */
-    tm1637_start();
-    tm1637_write_byte(TM1637_CMD_SET_BRIGHT | (brightness & 0x07));
-    tm1637_stop();
+void tm1637_display_cal(uint8_t brightness)
+{
+    if (brightness >= 7)
+    {
+        brightness = 7;
+    }
+    uint8_t letter_C = 0b00111001;
+    uint8_t letter_A = 0b01110111;
+    uint8_t letter_L = 0b10111000;
+
+    uint8_t letters[] = {
+        letter_C,
+        letter_A,
+        letter_L
+    };
+    tm1637_display_letters(letters, 3, brightness);
 }

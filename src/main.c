@@ -51,25 +51,12 @@ int main(void)
 	init_gpio_outputs();
 	init_ble();
 
-	ble_start_adv();
-
 	fsm_start();
 
     uint8_t digits[4] = {1, 2, 3, 4};
 
-	if (led.port) {
-		unsigned int key = 0;
-		int locked = 0;
-		while (1) {
-			/* If we have an LED, match its state to the button's. */
-			int val = gpio_pin_get_dt(&button_ready);
-			if (val > 0)
-			{	
-				gpio_pin_set_dt(&led, val);
-			}
-			print_thread_priorities();
-			k_msleep(6000);	
-		}
+	while (1) {
+    k_sleep(K_FOREVER);
 	}
 	return 0;
 }

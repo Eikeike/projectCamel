@@ -6,3 +6,4 @@ project(button)
 
 target_include_directories(app PRIVATE include)
 target_sources(app PRIVATE src/main.c src/tm1637.c src/fsm_core.c src/runtime.c src/state_machine.c src/bluetooth.c)
+set(DBOARD_ROOT .)

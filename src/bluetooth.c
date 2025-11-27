@@ -11,9 +11,10 @@
 #define CHUNK_SIZE              10
 #define MAX_INDICATION_RETRIES  3
 #define INDICATION_TIMEOUT_MS   5000
-#define MAX_SDU_SIZE_BYTE       243 //247 MTU - 4 byte header            
+#define MAX_SDU_SIZE_BYTE       243 //247 MTU - 4 byte header
+#define COUNT_BYTES(num)        (num * sizeof(uint32_t))
 
-static bool g_is_advertising = 1;
+static bool g_is_advertising = 0;
 static bool g_is_connected = 0;
 
 static uint8_t indication_retry_count = 0;
@@ -33,21 +34,24 @@ enum transmission_flags {
 };
 
 //Header
-struct ble_packet_header {
+#pragma pack(push, 1)
+struct  ble_packet_header {
     uint8_t flag;           // Packet type flag
     uint16_t chunk_index;   // Current chunk number
     uint8_t data_size_bytes;     // Size of one chunk in byte (= Number of timestamps * 4)
-} __packed;
+};
 
 //Data Package buffer
 struct ble_transmission_packet {
     struct ble_packet_header header;
     uint32_t *data_buff;        // Pointing to a location within bulk_data_service.timestamps
-} __packed;
+};
+
+#pragma pack(pop)
 
 //Datastructure for Characteristic holding the data
 struct bulk_data_service {
-    uint32_t timestamps[MAX_TIMESTAMPS];
+    uint8_t timestamp_bytes[COUNT_BYTES(MAX_TIMESTAMPS)];
     uint16_t count;        // Number of valid timestamps
     uint16_t idx_to_send;   // Index of next timestamp to send
     bool transmission_active;
@@ -64,6 +68,9 @@ static struct bulk_data_service g_bulk_service = {
     .sdu_size = 16 //23 = default MTU, minus header size (4byte) yields 19byte --> 16 is next one div by 4
 };
 
+static struct bt_gatt_indicate_params ind_params;
+static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
+
 /* Custom 128-bit UUIDs */
 #define BT_UUID_CUSTOM_SERVICE_VAL \
     BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef0)
@@ -75,12 +82,10 @@ static struct bulk_data_service g_bulk_service = {
 static struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_SERVICE_VAL);
 static struct bt_uuid_128 custom_char_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_CHAR_VAL);
 
-static uint8_t custom_value[] = "Hello BLE";
-
-static struct bt_gatt_indicate_params ind_params;
 
 static void indication_retry_handler(struct k_work *work)
 {
+    printk("Retrying :(\n");
     int err = bt_gatt_indicate(g_bulk_service.current_conn, &last_ind_params);
     if (err) {
         printk("Retry failed to start: %d\n", err);
@@ -97,26 +102,10 @@ static ssize_t read_custom(struct bt_conn *conn,
 }
 
 
-static ssize_t write_custom(struct bt_conn *conn,
-                            const struct bt_gatt_attr *attr,
-                            const void *buf, uint16_t len, uint16_t offset,
-                            uint8_t flags)
-{
-    uint8_t *value = attr->user_data;
-    memcpy(value, buf, MIN(len, sizeof(custom_value) - 1));
-    value[len] = '\0';
-    printk("Wrote: %s\n", value);
-    return len;
-}
-
-
 void mtu_updated(struct bt_conn *conn, uint16_t tx, uint16_t rx)
 {
 	printk("Updated MTU: TX: %d RX: %d bytes\n", tx, rx);
-    //minimum of tx and rx, but make it divisible by size of uint32 (4, most likely)
-    uint16_t tx_sdu = tx - (tx % sizeof(g_bulk_service.timestamps[0]));
-    uint16_t rx_sdu = tx - (tx % sizeof(g_bulk_service.timestamps[0]));
-    g_bulk_service.sdu_size = MIN(tx_sdu, rx_sdu) - 4; //4 = header size
+    g_bulk_service.sdu_size = MIN(tx, rx) - sizeof(struct ble_packet_header) - 3;
 }
 
 
@@ -129,12 +118,12 @@ static struct bt_gatt_cb gatt_callbacks = {
 BT_GATT_SERVICE_DEFINE(custom_svc,
     BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),
     BT_GATT_CHARACTERISTIC(&custom_char_uuid.uuid,
-                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_INDICATE,
-                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
-                           read_custom, write_custom, custom_value),
+                           BT_GATT_CHRC_INDICATE,
+                           BT_GATT_PERM_NONE ,
+                           NULL, NULL, NULL),
     BT_GATT_DESCRIPTOR(&custom_char_uuid.uuid,
                        BT_GATT_PERM_READ,
-                       bt_gatt_attr_read, NULL,
+                       read_custom, NULL,
                        "Drinking Speed Service"),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
 );
@@ -178,14 +167,15 @@ void ble_start_adv()
     int err = 0;
     g_is_connected = 0;
     printk("Advertising started");
-    err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-    if (err) {
-        printk("Bluetooth init failed (err %d)\n", err);
-        return;
+    if (!g_is_advertising)
+    {
+        err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+        if (err) {
+            printk("Bluetooth init failed (err %d)\n", err);
+            return;
+        }
     }
     g_is_advertising = 1;
-    printk("Bluetooth initialized\n");
-    bt_gatt_cb_register(&gatt_callbacks);
 }
 
 
@@ -215,6 +205,8 @@ int init_ble()
     if (IS_ENABLED(CONFIG_SETTINGS)) {
         settings_load();
     }
+    bt_gatt_cb_register(&gatt_callbacks);
+
     return err;
 }
 
@@ -246,13 +238,10 @@ static void indicate_cb(struct bt_conn *conn,
             k_sem_give(&indication_sem);
         } else {
             printk("Indication failed after %d retries\n", MAX_INDICATION_RETRIES);
-            // Handle complete failure - could transition state machine to error
         }
     }
 }
 
-struct ble_packet_header header;
-static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
 
 int ble_send_start()
 {
@@ -269,7 +258,7 @@ int ble_send_start()
     memcpy(tx_buffer, &header, sizeof(header));
     memcpy(tx_buffer + sizeof(header), &g_bulk_service.count, sizeof(g_bulk_service.count));
 
-    ind_params.attr = &custom_svc.attrs[1];  // Your characteristic
+    ind_params.attr = &custom_svc.attrs[2];
     ind_params.func = indicate_cb;
     ind_params.data = tx_buffer;
     ind_params.len = sizeof(header) + sizeof(g_bulk_service.count);
@@ -289,6 +278,11 @@ bool ble_is_sending()
     return g_bulk_service.transmission_active;
 }
 
+bool ble_is_adv()
+{
+    return g_is_advertising;
+}
+
 
 int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements)
 {
@@ -301,14 +295,11 @@ int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements)
     };
     //copy buffer to local
     const uint8_t *bytes = (const uint8_t *)data_buffer;
-    size_t total_bytes = num_elements * sizeof(uint32_t);
-    for (int i = 0; i < num_elements; i++)
+    memcpy(g_bulk_service.timestamp_bytes, bytes, COUNT_BYTES(num_elements));
+    printk("Sending Data:\n");
+    for (int i = 0; i < COUNT_BYTES(num_elements); i++)
     {
-        g_bulk_service.timestamps[i] = data_buffer[i];
-    }
-    for (int i = 0; i < total_bytes; i++)
-    {
-        printk("%02X", bytes[i]);
+        printk("%02X-", bytes[i]);
     }
     printk("\n");
     g_bulk_service.count = num_elements;
@@ -321,6 +312,7 @@ int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements)
 
 int ble_send_chunk()
 {
+    printk("Sending chunk");
     if (k_sem_take(&indication_sem, K_MSEC(INDICATION_TIMEOUT_MS)) != 0) {
         printk("Previous indication timeout\n");
         return -ETIMEDOUT;
@@ -333,38 +325,36 @@ int ble_send_chunk()
     int err;
 
     struct ble_packet_header header;
-    struct ble_transmission_packet pack;
     const uint16_t next_idx = g_bulk_service.idx_to_send;
-    uint16_t data_length = 0;
-    if (next_idx < g_bulk_service.count)
+    uint16_t tx_length = 0;
+    if (next_idx < COUNT_BYTES(g_bulk_service.count))
     {
         header.flag = TX_FLAG_DATA;
         header.chunk_index = next_idx / g_bulk_service.sdu_size; //intentional integer division
-        header.data_size_bytes = MIN(g_bulk_service.sdu_size, (MAX_TIMESTAMPS - g_bulk_service.idx_to_send) * sizeof(g_bulk_service.timestamps[0]));
-
-        pack.data_buff = &g_bulk_service.timestamps[next_idx];
-        data_length = sizeof(header) + header.data_size_bytes;
+        header.data_size_bytes = MIN(g_bulk_service.sdu_size, (COUNT_BYTES(g_bulk_service.count) - g_bulk_service.idx_to_send));
+        printk("sending index %d with next idx = %d, header size = %d and data size = %d\n", header.chunk_index, next_idx, sizeof(header), header.data_size_bytes);
+       tx_length = sizeof(header) + header.data_size_bytes;
 
         if (header.data_size_bytes <= (sizeof(tx_buffer)/sizeof(tx_buffer[0])))
         {
             memcpy(tx_buffer, &header, sizeof(header));
-            memcpy(tx_buffer + sizeof(header), &g_bulk_service.timestamps[next_idx], header.data_size_bytes);
+            memcpy(tx_buffer + sizeof(header), &g_bulk_service.timestamp_bytes[next_idx], header.data_size_bytes);
         }
 
     } else {
         header.flag = TX_FLAG_END;
         header.chunk_index = 0;
         header.data_size_bytes = 0;
-        data_length = sizeof(header);
+        tx_length = sizeof(header);
         memcpy(tx_buffer, &header, sizeof(header));
         g_bulk_service.transmission_active = 0;
     }
     
 
-    ind_params.attr = &custom_svc.attrs[1];  // Your characteristic
+    ind_params.attr = &custom_svc.attrs[2];
     ind_params.func = indicate_cb;
     ind_params.data = tx_buffer;
-    ind_params.len = data_length;
+    ind_params.len = tx_length;
 
 
     err = bt_gatt_indicate(g_bulk_service.current_conn, &ind_params);

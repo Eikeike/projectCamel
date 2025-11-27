@@ -20,6 +20,7 @@ void fsm_start()
     k_mutex_init(&g_stateMachine.lock);
     g_stateMachine.current = &STATES[STATE_IDLE];
     g_stateMachine.error = ERR_NONE;
+    g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
 
     k_thread_create(&state_machine_thread_data, state_machine_stack, K_THREAD_STACK_SIZEOF(state_machine_stack), fsm_main, NULL, NULL, NULL, STATE_MACHINE_THREAD_PRIO, 0, K_NO_WAIT);
     //k_thread_name_set(&state_machine_thread_data, "statemachinethread");
@@ -49,7 +50,7 @@ void fsm_main(void *p1, void *p2, void *p3)
                 irq_unlock(key);
             }
         }
-        k_msleep(9); //9ms because display and measurement resolution is 10ms
+        k_msleep(g_stateMachine.period_ms);
     }
     ARG_UNUSED(p1);
     ARG_UNUSED(p2);

@@ -51,6 +51,13 @@ const State_t STATES[NUM_STATES + 1] = {
         .onExit = SendingExit,
         .allowedTransitions = {STATE_ERROR, STATE_READY, STATE_MAX, STATE_MAX, STATE_MAX}
     },
+    [STATE_CALIBRATING] = {
+        .id = STATE_ERROR,
+        .onEntry = CalibEntry,
+        .runLoop = CalibRun,
+        .onExit = CalibExit,
+        .allowedTransitions = {STATE_READY, STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX}
+    },
     [STATE_ERROR] = {
         .id = STATE_ERROR,
         .onEntry = ErrorEntry,

@@ -16,18 +16,39 @@
 static volatile uint32_t g_timestamps[TICKS_PER_LTR];
 static volatile uint16_t g_timestamp_idx_to_write = 0;
 
-#define TIMER_VALUE_MAX 			0xFFFFFFFF //32bit of 1b
+#define TIMER_VALUE_MAX 				0xFFFFFFFF //32bit of 1b
 
 #define TIMER_FREQUENCY_HZ				125000
+#define TIMER_TICK_DURATION_US			8
 #define MEARUEMENT_END_TIMEOUT_MS		1000 //TODO Adapt to real values with: max_drinking_time / (TICKS_PER_LTR/2) = max_time_between ticks
 #define TIMER_TIMEOUT_TIMESTAMP_DIFF	TIMER_FREQUENCY_HZ / 1000 * MEARUEMENT_END_TIMEOUT_MS
+
+#define ADV_BLINK_TIME_MS				1500
+static uint64_t last_timestamp_blink = 0; 
+
 
 static uint8_t ppi_channel;
 static uint8_t gpiote_in_channel;
 static uint8_t gpiote_in_channel_ready;
-static volatile uint32_t g_captured_timestamp = 0;
 
 uint8_t is_running = false;
+uint8_t party_mode = false;
+
+static K_TIMER_DEFINE(fsm_timer, NULL, NULL);
+
+void double_click_timer_exp(struct k_timer *timer);
+static K_TIMER_DEFINE(click_timer, double_click_timer_exp, NULL);
+void start_double_click_timer(struct k_work *work);
+K_WORK_DEFINE(double_click_timer_work, start_double_click_timer);
+
+void adv_timer_exp(struct k_timer *timer);
+static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
+static bool g_advertise_in_ready = 0;
+
+static uint8_t num_clicks = 0;
+#define DEBOUNCE_CLICK_MS			20
+#define MAX_DOUBLE_CLICK_TIMEOUT_MS	1000
+
 
 /*forward declare*/
 uint32_t timer1_get_value();
@@ -39,12 +60,15 @@ static void sensor_triggered_isr(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t tr
 		timer_reset();
 		nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_START); //starts timer in free running mode
 		fsm_transition_deferred(STATE_RUNNING);
-		is_running = true;
 	}
-	g_timestamps[g_timestamp_idx_to_write] = nrf_timer_cc_get(NRF_TIMER2, 1); //Read value on channel 1
-	g_timestamp_idx_to_write++;
-    printk("Sensor trigger detected");
+	if (g_stateMachine.current->id == STATE_RUNNING || g_stateMachine.requestStateDeferred == STATE_RUNNING)
+	{
+		is_running = true;
+		g_timestamps[g_timestamp_idx_to_write] = nrf_timer_cc_get(NRF_TIMER2, 1); //Read value on channel 1
+		g_timestamp_idx_to_write++;
+	}
 }
+
 
 static void setup_ppi_for_sensor(const struct gpio_dt_spec *sensor)
 {
@@ -59,7 +83,6 @@ static void setup_ppi_for_sensor(const struct gpio_dt_spec *sensor)
 			return;
 		}
 	}
-    
     // Allocate GPIOTE channel
     err = nrfx_gpiote_channel_alloc(&gpiote, &gpiote_in_channel);
     if (err != NRFX_SUCCESS) {
@@ -116,12 +139,22 @@ static void ready_button_pressed_isr(const struct device *dev, struct gpio_callb
     ARG_UNUSED(dev);
     ARG_UNUSED(cb);
     ARG_UNUSED(pins);
-	
-    /* Turn LED on */
-	
-	printk("Button pressed. Go to READY\n");
-    fsm_transition(STATE_READY);
-	
+	printk("Button pressed at %lldms\n", k_uptime_get());
+
+	num_clicks++;
+	if (num_clicks == 1)
+	{
+		printk("Go to READY\n");
+    	fsm_transition_deferred(STATE_READY);
+		if (!k_work_is_pending(&double_click_timer_work))
+		{
+			k_work_submit(&double_click_timer_work);
+		}
+	} else if (num_clicks == 2)
+	{
+		printk("Button pressed again. Start advertising\n");
+    	g_advertise_in_ready = true;
+	}	
 }
 
 
@@ -184,6 +217,26 @@ uint8_t setup_isr_for_gpio_in(const struct gpio_dt_spec *input)
  
 }
 
+
+void double_click_timer_exp(struct k_timer *timer)
+{
+	//No double click detected
+	printk("Double click expired at %lldms\n", k_uptime_get());
+	num_clicks = 0;
+}
+
+
+void start_double_click_timer(struct k_work *work)
+{
+	printk("Work: start timer at %lldms\n", k_uptime_get());
+	k_timer_start(&click_timer, K_MSEC(MAX_DOUBLE_CLICK_TIMEOUT_MS), K_NO_WAIT);
+}
+
+
+void adv_timer_exp(struct k_timer *timer)
+{
+	ble_stop_adv();
+}
 
 
 uint8_t init_gpio_inputs()
@@ -274,21 +327,73 @@ void timer_reset()
 }
 
 
-uint8_t IdleEntry(void) {return ERR_NO_IMPL;};
-uint8_t IdleRun(void) {return ERR_NONE;};
-uint8_t IdleExit(void) {return ERR_NONE;} ;
-
-uint8_t ReadyEntry(void) {
-	tm1637_display_ready(5);
+uint8_t IdleEntry(void)
+{
+	tm1637_display_off();
+	gpio_pin_set_dt(&led, 1);
+	g_stateMachine.period_ms = FSM_PERIOD_SLOW_MS;
 	return ERR_NONE;
 };
-uint8_t ReadyRun(void){return ERR_NONE;};
-uint8_t ReadyExit(void){return ERR_NONE;};
+
+uint8_t IdleRun(void) {return ERR_NONE;};
+uint8_t IdleExit(void)
+{
+	g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
+	return ERR_NONE;
+} ;
+
+
+uint8_t ReadyEntry(void)
+{
+	if (party_mode)
+	{
+		tm1637_display_bier(5);
+	} else {
+		tm1637_display_ready(2);
+	}
+	k_timer_start(&fsm_timer, K_SECONDS(120), K_NO_WAIT);
+	return ERR_NONE;
+};
+
+
+uint8_t ReadyRun(void)
+{
+	if (g_advertise_in_ready)
+	{
+		if (!ble_is_adv())
+		{
+			ble_start_adv();
+			k_timer_start(&adv_timer, K_SECONDS(120), K_NO_WAIT); //advertise for 2min max
+		}
+		uint64_t now = k_uptime_get();
+		if ((now - last_timestamp_blink) > ADV_BLINK_TIME_MS)
+		{
+			gpio_pin_toggle_dt(&led);
+			last_timestamp_blink = now;
+		}
+	}
+	
+	if (k_timer_status_get(&fsm_timer) > 0)
+	{
+		fsm_transition(STATE_IDLE);
+	}
+	printk("Running Ready Run at %lldms\n", k_uptime_get());
+	return ERR_NONE;
+};
+
+
+uint8_t ReadyExit(void)
+{
+	k_timer_stop(&fsm_timer); //TODO assign fsm_timer to state machine and stop it on each transition request
+	ble_stop_adv();
+	return ERR_NONE;
+};
 
 
 uint8_t RunningEntry(void)
 {
 	ble_stop_adv();
+	k_timer_stop(&adv_timer);
 	return ERR_NONE;
 };
 
@@ -304,7 +409,7 @@ uint8_t RunningRun(void)
 	unsigned int key = irq_lock();
 	last_saved_timestamp = g_timestamps[g_timestamp_idx_to_write - 1];
 	irq_unlock(key);
-	printk("Got timerValue %d\n" , current_timestamp);
+	//printk("Got timerValue %d\n" , current_timestamp);
 
 	uint64_t uS = current_timestamp * (1000000ULL / TIMER_FREQUENCY_HZ); //timetamp to microseconds (1 step = 8uS)
 	uint8_t digits[4];
@@ -313,12 +418,12 @@ uint8_t RunningRun(void)
 	digits[2] = (uint8_t)(uS / 100000) % 10; //100ms
 	digits[3] = (uint8_t)(uS / 10000) % 10; //10ms
 
-	tm1637_display_digits(digits, 8, 1);
+	tm1637_display_digits(digits, 4, 8, 1);
 
 	if (g_timestamp_idx_to_write > 0)
 	{
 		uint32_t diff = current_timestamp - last_saved_timestamp;
-		printk("Diffed to %d\n", diff);
+		//printk("Diffed to %d\n", diff);
 		
 		if (diff  >= TIMER_TIMEOUT_TIMESTAMP_DIFF)
 		{
@@ -338,7 +443,49 @@ uint8_t RunningExit(void)
 	return ERR_NONE;
 };
 
-static K_TIMER_DEFINE(sending_timer, NULL, NULL);
+uint8_t CalibEntry(void)
+{
+	tm1637_display_cal(5);
+};
+
+
+uint8_t CalibRun(void)
+{
+	uint32_t current_timestamp = TIMER_VALUE_MAX;
+	uint32_t last_saved_timestamp = 0;
+	
+	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_CAPTURE0); //sensor data on channel 1, task on channel 0
+	current_timestamp = nrf_timer_cc_get(NRF_TIMER2, 0); //Capture is done via PPI
+	unsigned int key = irq_lock();
+	last_saved_timestamp = g_timestamps[g_timestamp_idx_to_write - 1];
+	irq_unlock(key);
+
+	uint8_t digits[4];
+	digits[0] = (uint8_t)(g_timestamp_idx_to_write / 10000000) % 10; //10sec
+	digits[1] = (uint8_t)(g_timestamp_idx_to_write / 1000000) % 10; //1sec
+	digits[2] = (uint8_t)(g_timestamp_idx_to_write / 100000) % 10; //100ms
+	digits[3] = (uint8_t)(g_timestamp_idx_to_write / 10000) % 10; //10ms
+
+	tm1637_display_digits(digits, 4, 8, 1); //TODO: ANZAHL anpassen an die angezeigte Zahl und generell die Funktion hier irgendwie auslagern
+
+	if (g_timestamp_idx_to_write > 0)
+	{
+		uint32_t diff = current_timestamp - last_saved_timestamp;
+		//printk("Diffed to %d\n", diff);
+		
+		if (diff  >= TIMER_TIMEOUT_TIMESTAMP_DIFF)
+		{
+			fsm_transition(STATE_READY);
+		}
+	}
+};
+
+
+uint8_t CalibExit(void)
+{
+
+};
+
 
 uint8_t SendingEntry(void)
 {
@@ -351,9 +498,9 @@ uint8_t SendingEntry(void)
 	digits[2] = (uint8_t)(uS / 100000) % 10; //100ms
 	digits[3] = (uint8_t)(uS / 10000) % 10; //10ms
 
-	tm1637_display_digits(digits, 8, 1);
+	tm1637_display_digits(digits, 4, 8, 1);
 	//start a 10s timer
-	k_timer_start(&sending_timer, K_SECONDS(10), K_NO_WAIT);
+	k_timer_start(&fsm_timer, K_SECONDS(10), K_NO_WAIT);
 	return ERR_NONE;
 };
 
@@ -390,14 +537,14 @@ uint8_t SendingRun(void)
 					if (err != 0)
 					{
 						printk("BLE send chunk error\n");
-						start_sent = false;  // Reset for retry
+						start_sent = false;
 						return ERR_API;
 					}
 				}
 			}
 		}
 	};
-	if (k_timer_status_get(&sending_timer) > 0)
+	if (k_timer_status_get(&fsm_timer) > 0)
 	{
 		fsm_transition(STATE_READY);
 	}
@@ -406,7 +553,8 @@ uint8_t SendingRun(void)
 
 uint8_t SendingExit(void)
 {
-	k_timer_stop(&sending_timer);
+	start_sent = false;
+	k_timer_stop(&fsm_timer);
 	return ERR_NONE;
 };
 
