@@ -21,6 +21,7 @@
 #include "devicetree_devices.h"
 #include "fsm_core.h"
 #include "bluetooth.h"
+#include "memory.h"
 
 void print_thread_priorities(void)
 {
@@ -49,6 +50,7 @@ int main(void)
 	init_seven_seg();
 	init_gpio_inputs();
 	init_gpio_outputs();
+    init_memory_nv();
 	init_ble();
 
 	fsm_start();

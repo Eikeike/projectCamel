@@ -5,7 +5,10 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/uuid.h>
+#include <zephyr/drivers/flash.h>
+#include <zephyr/storage/flash_map.h>
 #include "bluetooth.h"
+#include "memory.h"
 
 #define MAX_TIMESTAMPS          300
 #define CHUNK_SIZE              10
@@ -32,6 +35,13 @@ enum transmission_flags {
     TX_FLAG_DATA = 0xBB,
     TX_FLAG_END = 0xCC
 };
+
+static struct nvs_fs fs_ble;
+
+#define NVS_PARTITION_BLE			storage_partition_ble
+#define NVS_PARTITION_DEVICE_BLE	FIXED_PARTITION_DEVICE(NVS_PARTITION_BLE)
+#define NVS_PARTITION_OFFSET_BLE	FIXED_PARTITION_OFFSET(NVS_PARTITION_BLE)
+#define NVS_PARTITION_SIZE_BLE      FIXED_PARTITION_SIZE(NVS_PARTITION_BLE)
 
 //Header
 #pragma pack(push, 1)
@@ -126,6 +136,8 @@ BT_GATT_SERVICE_DEFINE(custom_svc,
                        read_custom, NULL,
                        "Drinking Speed Service"),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
+    // Ready Signal einfügen
+    // Start Signal
 );
 
 
@@ -148,6 +160,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
     g_bulk_service.current_conn = conn;
 }
 
+
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
     printk("Disconnected (reason 0x%02x)\n", reason);
@@ -163,7 +176,6 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 
 void ble_start_adv()
 {
-
     int err = 0;
     g_is_connected = 0;
     printk("Advertising started");
@@ -197,11 +209,18 @@ void ble_stop_adv()
 
 int init_ble()
 {
+    int err;
     k_work_queue_init(&retry_work);
     k_work_queue_start(&retry_work, retry_work_stack, K_THREAD_STACK_SIZEOF(retry_work_stack), 4, NULL);
     k_work_init(&work, indication_retry_handler);
 
-    int err = bt_enable(NULL);
+    err = initialize_and_mount_fs(&fs_ble, NVS_PARTITION_DEVICE_BLE, NVS_PARTITION_OFFSET_BLE, NVS_PARTITION_SIZE_BLE);
+	if (err)
+	{
+		return 0;
+	}
+
+    err = bt_enable(NULL);
     if (IS_ENABLED(CONFIG_SETTINGS)) {
         settings_load();
     }

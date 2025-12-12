@@ -1,0 +1,23 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build-project",
+            "type": "shell",
+            "command": ".\\.venv\\Scripts\\activate; cd .\\trichter-device\\; west build -p=auto -b pilsPlatine .",
+            "problemMatcher": []
+        },
+        {
+            "label": "flash-project",
+            "type": "shell",
+            "command": "mcumgr conn add serial_1 type=\"serial\" connstring=\"COM5,baud=115200\"; mcumgr image upload .\\trichter-device\\build\\zephyr\\zephyr.signed.bin -c serial_1",
+            "problemMatcher": []
+        },
+        {
+            "label": "miniterm-debug",
+            "type": "shell",
+            "command": ".\\.venv\\Scripts\\activate; python -m serial.tools.miniterm COM5 115200",
+            "problemMatcher": []
+        }
+    ]
+}

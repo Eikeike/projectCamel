@@ -20,6 +20,7 @@
 		zephyr,sram = &sram0;
 		zephyr,flash = &flash0;
 		zephyr,code-partition = &slot0_partition;
+		zephyr,settings-partition = &storage_partition_ble;
 	};
 
 	leds {
@@ -38,17 +39,17 @@
 
 	buttons {
 		compatible = "gpio-keys";
-		debounce-interval-ms = <1>;
+		debounce-interval-ms = <30>;
 		button0: button_0 {
-			gpios = <&gpio0 14 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+			gpios = <&gpio0 14 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			label = "Bluetooth Pairing Button";
 		};
 		button1: button_1 {
-			gpios = <&gpio0 15 (GPIO_PULL_DOWN | GPIO_ACTIVE_HIGH)>;
+			gpios = <&gpio0 15 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
 			label = "Ready Status Button";
 		};
 		button2: button_2 {
-			gpios = <&gpio0 29 (GPIO_ACTIVE_HIGH)>;
+			gpios = <&gpio0 29 (GPIO_ACTIVE_LOW)>;
 			label = "Sensor Input";
 		};
 		button3: button_3 {
@@ -123,9 +124,13 @@
 			label = "image-scratch";
 			reg = <0x00070000 0xa000>;
 		};
-		storage_partition: partition@7a000 {
-			label = "storage";
-			reg = <0x0007a000 0x00006000>;
+		storage_partition_ble: partition@7a000 {
+			label = "storage_ble";
+			reg = <0x0007a000 0x00003000>;
+		};
+		storage_partition_app: partition@7d000 {
+			label = "storage_app";
+			reg = <0x0007d000 0x00003000>;
 		};
 	};
 };

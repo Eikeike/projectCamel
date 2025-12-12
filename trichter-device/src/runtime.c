@@ -11,6 +11,7 @@
 #include "devicetree_devices.h"
 #include "fsm_core.h"
 #include "bluetooth.h"
+#include "memory.h"
 
 #define TICKS_PER_LTR 300
 static volatile uint32_t g_timestamps[TICKS_PER_LTR];
@@ -24,7 +25,9 @@ static volatile uint16_t g_timestamp_idx_to_write = 0;
 #define TIMER_TIMEOUT_TIMESTAMP_DIFF	TIMER_FREQUENCY_HZ / 1000 * MEARUEMENT_END_TIMEOUT_MS
 
 #define ADV_BLINK_TIME_MS				1500
-static uint64_t last_timestamp_blink = 0; 
+#define TIMER_LONGPRESS_TIME_MS			4000
+static uint64_t last_timestamp_blink = 0;
+static uint64_t last_timestamp_ready_button = 0; 
 
 
 static uint8_t ppi_channel;
@@ -59,9 +62,13 @@ static void sensor_triggered_isr(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t tr
 	{
 		timer_reset();
 		nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_START); //starts timer in free running mode
-		fsm_transition_deferred(STATE_RUNNING);
+		if (g_stateMachine.current->id != STATE_CALIBRATING)
+		{
+			fsm_transition_deferred(STATE_RUNNING);
+		}
 	}
-	if (g_stateMachine.current->id == STATE_RUNNING || g_stateMachine.requestStateDeferred == STATE_RUNNING)
+	if (g_stateMachine.current->id == STATE_RUNNING || g_stateMachine.requestStateDeferred == STATE_RUNNING ||
+		g_stateMachine.current->id == STATE_CALIBRATING|| g_stateMachine.requestStateDeferred == STATE_CALIBRATING)
 	{
 		is_running = true;
 		g_timestamps[g_timestamp_idx_to_write] = nrf_timer_cc_get(NRF_TIMER2, 1); //Read value on channel 1
@@ -154,7 +161,8 @@ static void ready_button_pressed_isr(const struct device *dev, struct gpio_callb
 	{
 		printk("Button pressed again. Start advertising\n");
     	g_advertise_in_ready = true;
-	}	
+	}
+	last_timestamp_ready_button = k_uptime_get();
 }
 
 
@@ -246,6 +254,13 @@ uint8_t init_gpio_inputs()
 	//ret |= setup_isr_for_gpio_in(button_test_sensor, sensor_triggered_isr, &button_cb_data_2);
 
 	setup_ppi_for_sensor(&button_test_sensor);
+	//ret = gpio_pin_configure_dt(&button_ready, GPIO_INPUT);
+	if (ret != 0)
+	{
+		printk("Error %d: failed to configure button device %s pin %d\n", ret, button_ready.port->name, button_ready.pin);
+	} else {
+		printk("Set up Ready button at %s pin %d\n", button_ready.port->name, button_ready.pin);
+	}
 	return ret;
 }
 
@@ -352,6 +367,7 @@ uint8_t ReadyEntry(void)
 		tm1637_display_ready(2);
 	}
 	k_timer_start(&fsm_timer, K_SECONDS(120), K_NO_WAIT);
+	g_stateMachine.period_ms = FSM_PERIOD_SLOW_MS;
 	return ERR_NONE;
 };
 
@@ -365,6 +381,7 @@ uint8_t ReadyRun(void)
 			ble_start_adv();
 			k_timer_start(&adv_timer, K_SECONDS(120), K_NO_WAIT); //advertise for 2min max
 		}
+		//blinking while advertising
 		uint64_t now = k_uptime_get();
 		if ((now - last_timestamp_blink) > ADV_BLINK_TIME_MS)
 		{
@@ -372,12 +389,22 @@ uint8_t ReadyRun(void)
 			last_timestamp_blink = now;
 		}
 	}
+
+	//longpress detection
+	printk("Ready button %d\n", gpio_pin_get_dt(&button_ready));
+	if (gpio_pin_get_dt(&button_ready) == 0)
+	{
+		if ((k_uptime_get() - last_timestamp_ready_button) > TIMER_LONGPRESS_TIME_MS)
+		{
+			last_timestamp_ready_button = k_uptime_get(); 
+			fsm_transition(STATE_CALIBRATING);
+		}
+	}
 	
 	if (k_timer_status_get(&fsm_timer) > 0)
 	{
 		fsm_transition(STATE_IDLE);
 	}
-	printk("Running Ready Run at %lldms\n", k_uptime_get());
 	return ERR_NONE;
 };
 
@@ -446,6 +473,7 @@ uint8_t RunningExit(void)
 uint8_t CalibEntry(void)
 {
 	tm1637_display_cal(5);
+	return ERR_NONE;
 };
 
 
@@ -457,16 +485,25 @@ uint8_t CalibRun(void)
 	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_CAPTURE0); //sensor data on channel 1, task on channel 0
 	current_timestamp = nrf_timer_cc_get(NRF_TIMER2, 0); //Capture is done via PPI
 	unsigned int key = irq_lock();
-	last_saved_timestamp = g_timestamps[g_timestamp_idx_to_write - 1];
+	if (g_timestamp_idx_to_write >= 1)
+	{
+		last_saved_timestamp = g_timestamps[g_timestamp_idx_to_write - 1];
+	}
 	irq_unlock(key);
 
 	uint8_t digits[4];
-	digits[0] = (uint8_t)(g_timestamp_idx_to_write / 10000000) % 10; //10sec
-	digits[1] = (uint8_t)(g_timestamp_idx_to_write / 1000000) % 10; //1sec
-	digits[2] = (uint8_t)(g_timestamp_idx_to_write / 100000) % 10; //100ms
-	digits[3] = (uint8_t)(g_timestamp_idx_to_write / 10000) % 10; //10ms
+	digits[0] = (uint8_t)(g_timestamp_idx_to_write / 1000) % 10; //1000
+	digits[1] = (uint8_t)(g_timestamp_idx_to_write / 100) % 10; //100
+	digits[2] = (uint8_t)(g_timestamp_idx_to_write / 10) % 10; //10
+	digits[3] = (uint8_t)g_timestamp_idx_to_write % 10; //1
 
-	tm1637_display_digits(digits, 4, 8, 1); //TODO: ANZAHL anpassen an die angezeigte Zahl und generell die Funktion hier irgendwie auslagern
+	// I hate this 
+	uint8_t num_digits =
+    (g_timestamp_idx_to_write >= 1000) ? 4 :
+    (g_timestamp_idx_to_write >= 100)  ? 3 :
+    (g_timestamp_idx_to_write >= 10)   ? 2 : 1;
+
+	tm1637_display_digits(digits, num_digits, 6, 5); //dot at 5 = no dot
 
 	if (g_timestamp_idx_to_write > 0)
 	{
@@ -475,15 +512,20 @@ uint8_t CalibRun(void)
 		
 		if (diff  >= TIMER_TIMEOUT_TIMESTAMP_DIFF)
 		{
+			global_calibration_value = g_timestamp_idx_to_write;
 			fsm_transition(STATE_READY);
 		}
 	}
+	return ERR_NONE;
 };
 
 
 uint8_t CalibExit(void)
 {
-
+	is_running = false;
+	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_STOP);
+	save_counter_ram_to_rom();
+	return ERR_NONE;
 };
 
 
