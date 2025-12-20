@@ -21,7 +21,7 @@
 #error "Unsupported board: buttonTest devicetree alias is not defined"
 #endif
 
-#define GPIOTE_INST	NRF_DT_GPIOTE_INST(DT_ALIAS(buttontest), gpios)
+#define GPIOTE_INST	NRF_DT_GPIOTE_INST(BUTTON_TEST_SENSOR, gpios)
 #define GPIOTE_NODE	DT_NODELABEL(_CONCAT(gpiote, GPIOTE_INST))
 
 

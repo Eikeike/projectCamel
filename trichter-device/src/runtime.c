@@ -2,16 +2,22 @@
 #include <stdint.h>
 #include <hal/nrf_gpio.h>
 #include <hal/nrf_gpiote.h>
+#include <gpiote_nrfx.h>
 #include <hal/nrf_timer.h>
 #include <zephyr/drivers/counter.h>
 #include <nrfx_gpiote.h>
+#include <zephyr/irq.h>
 #include <helpers/nrfx_gppi.h>
 #include "runtime.h"
+#include "drivers/nrfx_errors.h"
+#include "mdk/nrf52.h"
 #include "tm1637.h"
 #include "devicetree_devices.h"
 #include "fsm_core.h"
 #include "bluetooth.h"
 #include "memory.h"
+#include "zephyr/drivers/gpio.h"
+#include "zephyr/kernel.h"
 
 #define TICKS_PER_LTR 300
 static volatile uint32_t g_timestamps[TICKS_PER_LTR];
@@ -27,10 +33,8 @@ static volatile uint16_t g_timestamp_idx_to_write = 0;
 #define ADV_BLINK_TIME_MS				1500
 #define TIMER_LONGPRESS_TIME_MS			4000
 static uint64_t last_timestamp_blink = 0;
-static uint64_t last_timestamp_ready_button = 0; 
 
-
-static uint8_t ppi_channel;
+static nrfx_gppi_handle_t ppi_channel;
 static uint8_t gpiote_in_channel;
 static uint8_t gpiote_in_channel_ready;
 
@@ -48,15 +52,18 @@ void adv_timer_exp(struct k_timer *timer);
 static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
 static bool g_advertise_in_ready = 0;
 
-static uint8_t num_clicks = 0;
-#define DEBOUNCE_CLICK_MS			20
+struct g_ready_button_t {
+	uint8_t num_clicks;
+	uint8_t debounce_is_user_press;
+	uint64_t last_timestamp_ready_button; 
+} g_ready_button;
+
+#define DEBOUNCE_CLICK_MS			35
 #define MAX_DOUBLE_CLICK_TIMEOUT_MS	1000
 
+void timer_reset();
 
-/*forward declare*/
-uint32_t timer1_get_value();
-
-static void sensor_triggered_isr(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *context)
+static void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, unsigned int pins)
 {
 	if (!is_running)
 	{
@@ -66,12 +73,16 @@ static void sensor_triggered_isr(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t tr
 		{
 			fsm_transition_deferred(STATE_RUNNING);
 		}
+		is_running = true;
 	}
 	if (g_stateMachine.current->id == STATE_RUNNING || g_stateMachine.requestStateDeferred == STATE_RUNNING ||
 		g_stateMachine.current->id == STATE_CALIBRATING|| g_stateMachine.requestStateDeferred == STATE_CALIBRATING)
 	{
-		is_running = true;
-		g_timestamps[g_timestamp_idx_to_write] = nrf_timer_cc_get(NRF_TIMER2, 1); //Read value on channel 1
+		if (g_timestamp_idx_to_write < TICKS_PER_LTR)
+		{
+			g_timestamps[g_timestamp_idx_to_write] = nrf_timer_cc_get(NRF_TIMER2, 1); //Read value on channel 1
+			printk("Sensor pressed at %d\n", g_timestamps[g_timestamp_idx_to_write]);
+		}
 		g_timestamp_idx_to_write++;
 	}
 }
@@ -80,76 +91,65 @@ static void sensor_triggered_isr(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t tr
 static void setup_ppi_for_sensor(const struct gpio_dt_spec *sensor)
 {
     nrfx_err_t err;
-    const nrfx_gpiote_t gpiote = NRFX_GPIOTE_INSTANCE(GPIOTE_INST);
+    static nrfx_gpiote_t gpiote = NRFX_GPIOTE_INSTANCE(NRF_GPIOTE);
 
-	if (0 == nrfx_gpiote_init_check(&gpiote))
+	if (false == nrfx_gpiote_init_check(&gpiote))
 	{
 		err = nrfx_gpiote_init(&gpiote, 0);
-		if (err != NRFX_SUCCESS) {
+		if (err != 0) {
 			printk("GPIOTE init failed: %08x\n", err);
 			return;
 		}
 	}
     // Allocate GPIOTE channel
     err = nrfx_gpiote_channel_alloc(&gpiote, &gpiote_in_channel);
-    if (err != NRFX_SUCCESS) {
+    if (err != 0) {
         printk("GPIOTE channel alloc failed: %08x\n", err);
         return;
     }
 
     // Configure input pin
     nrfx_gpiote_trigger_config_t trigger_config = {
-        .trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
+        .trigger = NRFX_GPIOTE_TRIGGER_LOTOHI,
         .p_in_channel = &gpiote_in_channel,
     };
     
-	static const nrfx_gpiote_handler_config_t handler_config = {
-		.handler = sensor_triggered_isr,
-	};
-
     nrfx_gpiote_input_pin_config_t input_config = {
         .p_pull_config = NULL,  // Use existing pull config
         .p_trigger_config = &trigger_config,
-        .p_handler_config = &handler_config 
+        .p_handler_config = NULL 
     };
 
     err = nrfx_gpiote_input_configure(&gpiote, sensor->pin, &input_config);
-    if (err != NRFX_SUCCESS) {
+    if (err != 0) {
         printk("GPIOTE input config failed: %08x\n", err);
         return;
     }
+	nrfx_gpiote_trigger_enable(&gpiote, sensor->pin, false);
+	
+    uint32_t eep = nrf_gpiote_event_address_get(NRF_GPIOTE, nrfx_gpiote_in_event_get(&gpiote, sensor->pin));
+    uint32_t tep = nrf_timer_task_address_get(NRF_TIMER2, NRF_TIMER_TASK_CAPTURE1);
 
-	printk("GPIOTE EVENT_IN[%d] addr: %08x\n", 
-           gpiote_in_channel, 
-           nrfx_gpiote_in_event_address_get(&gpiote, sensor->pin));
+	printk("EVENT addr IN : %08x; OUT : %08x\n", eep, tep);
 
-    // Allocate PPI channel
-    err = nrfx_gppi_channel_alloc(&ppi_channel);
-    if (err != NRFX_SUCCESS) {
-        printk("PPI channel alloc failed: %08x\n", err);
+    err = nrfx_gppi_conn_alloc(eep, tep, &ppi_channel);
+    if (err != 0) {
+        printk("GPPI conn alloc failed: 0x%08x\n", err);
         return;
     }
 
-    // Connect GPIOTE event to Timer1 capture task
-    nrfx_gppi_channel_endpoints_setup(ppi_channel,
-        nrfx_gpiote_in_event_address_get(&gpiote, sensor->pin),
-        nrf_timer_task_address_get(NRF_TIMER2, NRF_TIMER_TASK_CAPTURE1));
-
-    // Enable PPI channel and GPIOTE input
-    nrfx_gppi_channels_enable(BIT(ppi_channel));
-    nrfx_gpiote_trigger_enable(&gpiote, sensor->pin, true);
+    // Enable the connection (replaces nrfx_gppi_channels_enable(BIT(channel)))
+    nrfx_gppi_conn_enable(ppi_channel);
 }
 
 
-static void ready_button_pressed_isr(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+static void ready_button_pressed_handler()
 {
-    ARG_UNUSED(dev);
-    ARG_UNUSED(cb);
-    ARG_UNUSED(pins);
 	printk("Button pressed at %lldms\n", k_uptime_get());
+	if ((k_uptime_get() - g_ready_button.last_timestamp_ready_button) <= DEBOUNCE_CLICK_MS) return;
 
-	num_clicks++;
-	if (num_clicks == 1)
+	g_ready_button.num_clicks++;
+	if (g_ready_button.num_clicks == 1)
 	{
 		printk("Go to READY\n");
     	fsm_transition_deferred(STATE_READY);
@@ -157,12 +157,14 @@ static void ready_button_pressed_isr(const struct device *dev, struct gpio_callb
 		{
 			k_work_submit(&double_click_timer_work);
 		}
-	} else if (num_clicks == 2)
+	} else if (g_ready_button.num_clicks == 2)
 	{
 		printk("Button pressed again. Start advertising\n");
     	g_advertise_in_ready = true;
+		g_ready_button.num_clicks = 0;
+		k_timer_stop(&click_timer);
 	}
-	last_timestamp_ready_button = k_uptime_get();
+	g_ready_button.last_timestamp_ready_button = k_uptime_get();
 }
 
 
@@ -174,55 +176,46 @@ void init_seven_seg()
     }
 }
 
+static void ready_button_cooldown_expired(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    ready_button_pressed_handler();
+}
 
-uint8_t setup_isr_for_gpio_in(const struct gpio_dt_spec *input)
+static K_WORK_DELAYABLE_DEFINE(ready_debounce_work, ready_button_cooldown_expired);
+
+
+void ready_button_isr(const struct device *dev, struct gpio_callback *cb,
+		    uint32_t pins)
+{
+	printk("Button pressed, scheduling handler...\n");
+    k_work_reschedule(&ready_debounce_work, K_MSEC(15));
+}
+
+
+uint8_t setup_isr_for_gpio_in(const struct gpio_dt_spec *input, struct gpio_callback *cb , gpio_callback_handler_t handler)
 {
 	nrfx_err_t err;
-    const nrfx_gpiote_t gpiote = NRFX_GPIOTE_INSTANCE(GPIOTE_INST);
 
-	if (0 == nrfx_gpiote_init_check(&gpiote))
-	{
-		err = nrfx_gpiote_init(&gpiote, 0);
-		if (err != NRFX_SUCCESS) {
-			printk("GPIOTE init failed: %08x\n", err);
-			return;
-		}
+	err = gpio_pin_configure_dt(	input, GPIO_INPUT);
+	if (err) {
+		printk("ERROR: GPIO input could not be set");
+		return err;
 	}
-    
-    // Allocate GPIOTE channel
-    err = nrfx_gpiote_channel_alloc(&gpiote, &gpiote_in_channel_ready);
-    if (err != NRFX_SUCCESS) {
-        printk("GPIOTE channel alloc failed: %08x\n", err);
-        return;
+	err = gpio_pin_interrupt_configure(input->port, input->pin, GPIO_INT_EDGE_RISING);
+	if (err) {
+		printk("ERROR: GPIO interrupt flags could not be set");
+		return err;
+	}
+	gpio_init_callback(cb, handler, BIT(input->pin));
+	
+	err = gpio_add_callback(input->port, cb);
+    if (err) {
+        printk("ERROR: Add interrupt failed\n");
+        gpio_pin_interrupt_configure(input->port, input->pin, GPIO_INT_DISABLE);
+        return err;
     }
-
-    // Configure input pin
-    nrfx_gpiote_trigger_config_t trigger_config = {
-        .trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
-        .p_in_channel = &gpiote_in_channel_ready,
-    };
-    
-	static const nrfx_gpiote_handler_config_t handler_config = {
-		.handler = ready_button_pressed_isr,
-	};
-
-    nrfx_gpiote_input_pin_config_t input_config = {
-        .p_pull_config = NULL,  // Use existing pull config
-        .p_trigger_config = &trigger_config,
-        .p_handler_config = &handler_config 
-    };
-
-    err = nrfx_gpiote_input_configure(&gpiote, input->pin, &input_config);
-    if (err != NRFX_SUCCESS) {
-        printk("GPIOTE input config failed: %08x\n", err);
-        return;
-    }
-
-	printk("GPIOTE EVENT_IN[%d] addr: %08x\n", 
-           gpiote_in_channel_ready, 
-           nrfx_gpiote_in_event_address_get(&gpiote, input->pin));
-	nrfx_gpiote_trigger_enable(&gpiote, input->pin, true);
- 
+	return 0;
 }
 
 
@@ -230,13 +223,13 @@ void double_click_timer_exp(struct k_timer *timer)
 {
 	//No double click detected
 	printk("Double click expired at %lldms\n", k_uptime_get());
-	num_clicks = 0;
+	g_ready_button.num_clicks = 0;
 }
 
 
 void start_double_click_timer(struct k_work *work)
 {
-	printk("Work: start timer at %lldms\n", k_uptime_get());
+	printk("Double click timer: start timer at %lldms\n", k_uptime_get());
 	k_timer_start(&click_timer, K_MSEC(MAX_DOUBLE_CLICK_TIMEOUT_MS), K_NO_WAIT);
 }
 
@@ -250,37 +243,17 @@ void adv_timer_exp(struct k_timer *timer)
 uint8_t init_gpio_inputs()
 {
     int ret = 0;
-    ret = setup_isr_for_gpio_in(&button_ready);
-	//ret |= setup_isr_for_gpio_in(button_test_sensor, sensor_triggered_isr, &button_cb_data_2);
-
+    ret = setup_isr_for_gpio_in(&button_ready, &button_cb_data_1, ready_button_isr);
+	ret |= setup_isr_for_gpio_in(&button_test_sensor, &button_cb_data_2, sensor_triggered_isr);
 	setup_ppi_for_sensor(&button_test_sensor);
-	//ret = gpio_pin_configure_dt(&button_ready, GPIO_INPUT);
+
 	if (ret != 0)
 	{
-		printk("Error %d: failed to configure button device %s pin %d\n", ret, button_ready.port->name, button_ready.pin);
+		printk("Error %d: failed to configure GPIO inputs\n", ret);
 	} else {
-		printk("Set up Ready button at %s pin %d\n", button_ready.port->name, button_ready.pin);
+		printk("Set up All GPIO Inputs successfully");
 	}
 	return ret;
-}
-
-
-uint32_t timer1_get_value()
-{
-	volatile uint32_t ticks = 0;
-	int err = 1;
-	if (!g_timer_initialized)
-	{
-		err = counter_get_value(hw_timer_1, &ticks);
-		if (!err)
-		{
-			return ticks;
-		} else {
-			return TIMER_VALUE_MAX;
-		}
-	} else {
-		return TIMER_VALUE_MAX;
-	}
 }
 
 
@@ -310,10 +283,10 @@ void timer_reset()
 {
 	for (uint16_t i = 0; i < TICKS_PER_LTR; ++i)
 	{
-		g_timestamps[i] = TIMER_VALUE_MAX;
-		g_timestamp_idx_to_write = 0;
+		g_timestamps[i] = 0;
 	}
-		nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_CLEAR);
+	g_timestamp_idx_to_write = 0;
+	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_CLEAR);
 
     for (uint8_t i = 0; i < NRF_TIMER_CC_CHANNEL_COUNT(2); i++) {
         nrf_timer_cc_set(NRF_TIMER2, (nrf_timer_cc_channel_t)i, 0);
@@ -337,7 +310,6 @@ void timer_reset()
     nrf_timer_bit_width_set(NRF_TIMER2, NRF_TIMER_BIT_WIDTH_32);
 	nrf_timer_shorts_disable(NRF_TIMER2, NRF_TIMER_SHORT_COMPARE1_CLEAR_MASK | NRF_TIMER_SHORT_COMPARE0_CLEAR_MASK);
 
-	
 	printk("Successfully reset timer\n");
 }
 
@@ -392,11 +364,11 @@ uint8_t ReadyRun(void)
 
 	//longpress detection
 	printk("Ready button %d\n", gpio_pin_get_dt(&button_ready));
-	if (gpio_pin_get_dt(&button_ready) == 0)
+	if (gpio_pin_get_dt(&button_ready) == 1)
 	{
-		if ((k_uptime_get() - last_timestamp_ready_button) > TIMER_LONGPRESS_TIME_MS)
+		if ((k_uptime_get() - g_ready_button.last_timestamp_ready_button) > TIMER_LONGPRESS_TIME_MS)
 		{
-			last_timestamp_ready_button = k_uptime_get(); 
+			g_ready_button.last_timestamp_ready_button = k_uptime_get(); 
 			fsm_transition(STATE_CALIBRATING);
 		}
 	}
@@ -413,6 +385,7 @@ uint8_t ReadyExit(void)
 {
 	k_timer_stop(&fsm_timer); //TODO assign fsm_timer to state machine and stop it on each transition request
 	ble_stop_adv();
+	g_advertise_in_ready = false;
 	return ERR_NONE;
 };
 
@@ -473,6 +446,7 @@ uint8_t RunningExit(void)
 uint8_t CalibEntry(void)
 {
 	tm1637_display_cal(5);
+	timer_reset();
 	return ERR_NONE;
 };
 
@@ -488,27 +462,22 @@ uint8_t CalibRun(void)
 	if (g_timestamp_idx_to_write >= 1)
 	{
 		last_saved_timestamp = g_timestamps[g_timestamp_idx_to_write - 1];
-	}
-	irq_unlock(key);
+		irq_unlock(key);
 
-	uint8_t digits[4];
-	digits[0] = (uint8_t)(g_timestamp_idx_to_write / 1000) % 10; //1000
-	digits[1] = (uint8_t)(g_timestamp_idx_to_write / 100) % 10; //100
-	digits[2] = (uint8_t)(g_timestamp_idx_to_write / 10) % 10; //10
-	digits[3] = (uint8_t)g_timestamp_idx_to_write % 10; //1
+		uint8_t digits[4];
+		digits[0] = (uint8_t)(g_timestamp_idx_to_write / 1000) % 10; //1000
+		digits[1] = (uint8_t)(g_timestamp_idx_to_write / 100) % 10; //100
+		digits[2] = (uint8_t)(g_timestamp_idx_to_write / 10) % 10; //10
+		digits[3] = (uint8_t)g_timestamp_idx_to_write % 10; //1
 
-	// I hate this 
-	uint8_t num_digits =
-    (g_timestamp_idx_to_write >= 1000) ? 4 :
-    (g_timestamp_idx_to_write >= 100)  ? 3 :
-    (g_timestamp_idx_to_write >= 10)   ? 2 : 1;
-
-	tm1637_display_digits(digits, num_digits, 6, 5); //dot at 5 = no dot
-
-	if (g_timestamp_idx_to_write > 0)
-	{
+		// I hate this 
+		uint8_t num_digits =
+		(g_timestamp_idx_to_write >= 1000) ? 4 :
+		(g_timestamp_idx_to_write >= 100)  ? 3 :
+		(g_timestamp_idx_to_write >= 10)   ? 2 : 1;
+		tm1637_display_digits(digits, num_digits, 6, 5); //dot at 5 = no dot
 		uint32_t diff = current_timestamp - last_saved_timestamp;
-		//printk("Diffed to %d\n", diff);
+		printk("Diffed to %d\n", diff);
 		
 		if (diff  >= TIMER_TIMEOUT_TIMESTAMP_DIFF)
 		{

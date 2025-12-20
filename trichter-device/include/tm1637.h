@@ -18,6 +18,10 @@
 
 #define TM1637_BYTE_EMPTY_SEG      0x00
 
+#define TM1637_BRIGHTNESS_HIGH     0x07
+#define TM1637_BRIGHTNESS_MID      0x05
+#define TM1637_BRIGHTNESS_LOW      0x01
+
 /**
  * @brief Initialize the TM1637 GPIO pins
  *
