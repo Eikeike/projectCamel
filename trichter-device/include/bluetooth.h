@@ -14,6 +14,7 @@ int ble_send_chunk();
 int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements);
 bool ble_is_sending();
 bool ble_is_adv();
+void delete_all_connections();
 
 
 #endif //TRICHTER_BLUETOOTH_H

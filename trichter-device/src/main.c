@@ -16,6 +16,7 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/debug/object_tracing.h>
 #include <inttypes.h>
+#include "state_machine.h"
 #include "tm1637.h"
 #include "runtime.h"
 #include "devicetree_devices.h"
@@ -52,10 +53,8 @@ int main(void)
 	init_gpio_outputs();
     init_memory_nv();
 	init_ble();
-
 	fsm_start();
-
-    uint8_t digits[4] = {1, 2, 3, 4};
+    on_trichter_startup();
 
 	while (1) {
     k_sleep(K_FOREVER);

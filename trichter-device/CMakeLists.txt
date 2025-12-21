@@ -7,5 +7,5 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(camel)
 
 target_include_directories(app PRIVATE include)
-target_sources(app PRIVATE src/main.c src/tm1637.c src/fsm_core.c src/runtime.c src/state_machine.c src/bluetooth.c src/memory.c)
+target_sources(app PRIVATE src/main.c src/tm1637.c src/fsm_core.c src/runtime.c src/state_machine.c src/bluetooth.c src/memory.c src/inputs.c)
 

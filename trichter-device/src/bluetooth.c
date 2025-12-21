@@ -144,33 +144,56 @@ BT_GATT_SERVICE_DEFINE(custom_svc,
 /* Advertising data */
 static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_CUSTOM_SERVICE_VAL),
+    BT_DATA(BT_DATA_NAME_COMPLETE,
+            CONFIG_BT_DEVICE_NAME,
+            strlen(CONFIG_BT_DEVICE_NAME))
 };
 
 static const struct bt_data sd[] = {
-	BT_DATA(BT_DATA_NAME_COMPLETE, CONFIG_BT_DEVICE_NAME, sizeof(CONFIG_BT_DEVICE_NAME) - 1),
+BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_CUSTOM_SERVICE_VAL)
 };
-
+ 
 /* Connection callbacks */
 static void connected(struct bt_conn *conn, uint8_t err)
 {
     if (!err) printk("Connected\n");
+    if (g_is_connected) {
+        bt_conn_disconnect(conn, BT_HCI_ERR_CONN_LIMIT_EXCEEDED);
+        return;
+    }
     ble_stop_adv();
     g_is_connected = 1;
-    g_bulk_service.current_conn = conn;
+    g_bulk_service.current_conn = bt_conn_ref(conn);
+}
+
+
+void ble_delete_active_connection()
+{
+    if (g_bulk_service.current_conn && g_is_connected) {
+        bt_conn_disconnect(g_bulk_service.current_conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+    }
 }
 
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
     printk("Disconnected (reason 0x%02x)\n", reason);
-    ble_start_adv();
     g_is_connected = 0;
+    bt_conn_unref(g_bulk_service.current_conn);
 }
+
+
+static void recycled()
+{
+    printk("Recycled; starting advertising");
+    ble_start_adv();
+}
+
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
     .connected = connected,
     .disconnected = disconnected,
+    .recycled = recycled
 };
 
 
@@ -183,7 +206,7 @@ void ble_start_adv()
     {
         err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
         if (err) {
-            printk("Bluetooth init failed (err %d)\n", err);
+            printk("Bluetooth advertising start failed (err %d)\n", err);
             return;
         }
     }

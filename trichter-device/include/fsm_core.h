@@ -10,6 +10,7 @@ extern StateMachine_t g_stateMachine;
 #define FSM_PERIOD_SLOW_MS                      300
 
 void fsm_init();
+void fsm_start();
 void fsm_main(void *p1, void *p2, void *p3);
 uint8_t fsm_transition(StateID_t targetState);
 uint8_t fsm_transition_deferred(StateID_t state);
