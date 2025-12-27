@@ -41,3 +41,13 @@ TAGS
 tags
 
 .idea
+
+# --- Flutter & Android Studio (App) ---
+**/build/
+**/.dart_tool/
+**/.idea/
+**/*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+**/.pub-cache/
+**/.packages
