@@ -69,3 +69,12 @@ void save_counter_ram_to_rom()
 {
     nvs_write(&fs, CALIBRATION_VALUE_ID, &global_calibration_value, sizeof(global_calibration_value));
 }
+
+
+int read_counter_from_rom(uint16_t *counter_value)
+{
+	int err;
+	err = nvs_read(&fs, CALIBRATION_VALUE_ID, &global_calibration_value, sizeof(global_calibration_value));
+	*counter_value = (uint16_t)global_calibration_value;
+	return err;
+}

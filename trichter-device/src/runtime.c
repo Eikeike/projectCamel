@@ -26,12 +26,8 @@ static volatile uint16_t g_timestamp_idx_to_write = 0;
 
 #define TIMER_VALUE_MAX 				0xFFFFFFFF
 
-#define TIMER_FREQUENCY_HZ				125000 //TODO get from Devicetree
-#define TIMER_TICK_DURATION_US			8
-#define MEARUEMENT_END_TIMEOUT_MS		1000 //TODO Adapt to real values with: max_drinking_time / (TICKS_PER_LTR/2) = max_time_between ticks
-#define TIMER_TIMEOUT_TIMESTAMP_DIFF	TIMER_FREQUENCY_HZ / 1000 * MEARUEMENT_END_TIMEOUT_MS
-
 #define ADV_BLINK_TIME_MS				1500
+#define PRINT_TIMESTAMPS_IN_CONSOLE
 
 static uint64_t last_timestamp_blink = 0;
 static uint8_t is_running = false;
@@ -53,6 +49,7 @@ K_WORK_DELAYABLE_DEFINE(sensor_qualification_work, sensor_qualification_handler)
 
 
 void timer_reset();
+
 
 void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, unsigned int pins)
 {
@@ -174,7 +171,6 @@ void timer_reset()
 void on_trichter_startup()
 {
 	g_advertise_in_ready = true;
-	gpio_pin_set_dt(&led, 1);
     fsm_transition_deferred(STATE_READY);
 }
 
@@ -333,9 +329,9 @@ uint8_t CalibRun(void)
 	
 	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_CAPTURE0); //sensor data on channel 1, task on channel 0
 	current_timestamp = nrf_timer_cc_get(NRF_TIMER2, 0); //Capture is done via PPI
-	unsigned int key = irq_lock();
-	if (g_timestamp_idx_to_write >= 1)
+	if (g_timestamp_idx_to_write >= MIN_TIMESTAMPS_IN_BURST_WINDOW)
 	{
+		unsigned int key = irq_lock();
 		last_saved_timestamp = g_timestamps[g_timestamp_idx_to_write - 1];
 		irq_unlock(key);
 
@@ -345,7 +341,6 @@ uint8_t CalibRun(void)
 		digits[1] = (uint8_t)(g_timestamp_idx_to_write / 100) % 10; //100
 		digits[0] = (uint8_t)(g_timestamp_idx_to_write / 1000) % 10; //1000
 
-		// I hate this 
 		tm1637_display_digits(digits, 4, TM1637_BRIGHTNESS_MID, 5); //dot at 5 = no dot
 		uint32_t diff = current_timestamp - last_saved_timestamp;
 		printk("Diffed to %d\n", diff);
@@ -372,6 +367,23 @@ uint8_t CalibExit(void)
 };
 
 
+#ifdef PRINT_TIMESTAMPS_IN_CONSOLE
+void print_all_timestamps()
+{
+
+	printk("================ALL TIMESTAMPS==================\n");
+	printk("[");
+	for (int i = 0; i < g_timestamp_idx_to_write; i++)
+	{
+		uint8_t *b = (uint8_t *)&g_timestamps[i];
+		printk("%d, ", g_timestamps[i]);
+		k_msleep(8);
+	}
+	printk("]");
+}
+#endif
+
+
 uint8_t SendingEntry(void)
 {
 	uint32_t highest_stamp = g_timestamps[g_timestamp_idx_to_write - 1];
@@ -386,6 +398,10 @@ uint8_t SendingEntry(void)
 	tm1637_display_digits(digits, 4, 8, 1);
 	//start a 10s timer
 	k_timer_start(&fsm_timer, K_SECONDS(30), K_NO_WAIT);
+
+	#ifdef PRINT_TIMESTAMPS_IN_CONSOLE
+	print_all_timestamps();
+	#endif
 	return ERR_NONE;
 };
 

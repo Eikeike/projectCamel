@@ -52,7 +52,7 @@ int main(void)
 	init_gpio_inputs();
 	init_gpio_outputs();
     init_memory_nv();
-	init_ble();
+	init_ble(TIMER_TICK_DURATION_US);
 	fsm_start();
     on_trichter_startup();
 

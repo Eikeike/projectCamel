@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/kernel_structs.h>
 #include <zephyr/sys/printk.h>
@@ -7,6 +8,7 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/drivers/flash.h>
 #include <zephyr/storage/flash_map.h>
+#include <zephyr/settings/settings.h>
 #include "bluetooth.h"
 #include "memory.h"
 
@@ -19,6 +21,8 @@
 
 static bool g_is_advertising = 0;
 static bool g_is_connected = 0;
+
+static uint8_t g_timer_tick_duration = 0;
 
 static uint8_t indication_retry_count = 0;
 static struct bt_gatt_indicate_params last_ind_params;
@@ -83,15 +87,20 @@ static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
 
 /* Custom 128-bit UUIDs */
 #define BT_UUID_CUSTOM_SERVICE_VAL \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef0)
+    BT_UUID_128_ENCODE(0xaf56d6dd, 0x3c39, 0x4d67, 0x9bbe, 0x4fb04fa327cc)
 
-#define BT_UUID_CUSTOM_CHAR_VAL \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x56789abcdef1)
+/*Custom 128-bit UUIDs for Characeristics*/
+
+#define BT_UUID_ARRAY_CHARACTERISTIC_VAL \
+    BT_UUID_128_ENCODE( 0xf9d76937, 0xbd70, 0x4e4f, 0xa4da, 0x0b718d5f5b6d)
+
+#define BT_UUID_CALIB_CHAR_VAL \
+    BT_UUID_128_ENCODE(0x23de2cad, 0x0fc8, 0x49f4, 0xbbcc, 0x5eb2c9fdb91b)
 
 
 static struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_SERVICE_VAL);
-static struct bt_uuid_128 custom_char_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_CHAR_VAL);
-
+static struct bt_uuid_128 drinking_char_uuid = BT_UUID_INIT_128(BT_UUID_ARRAY_CHARACTERISTIC_VAL);
+static struct bt_uuid_128 time_constant_char_uuid = BT_UUID_INIT_128(BT_UUID_CALIB_CHAR_VAL);
 
 static void indication_retry_handler(struct k_work *work)
 {
@@ -124,14 +133,31 @@ static struct bt_gatt_cb gatt_callbacks = {
 };
 
 
+static ssize_t read_time_constant(struct bt_conn *conn,
+                                const struct bt_gatt_attr *attr,
+                                void *buf, uint16_t len, uint16_t offset)
+{
+    return bt_gatt_attr_read(conn, attr, buf, len, offset,
+                             &g_timer_tick_duration, sizeof(g_timer_tick_duration));
+}
+
+
 /* Define custom service */
 BT_GATT_SERVICE_DEFINE(custom_svc,
     BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),
-    BT_GATT_CHARACTERISTIC(&custom_char_uuid.uuid,
+    /* Drinking Speed Characteristic */
+    BT_GATT_CHARACTERISTIC(&drinking_char_uuid.uuid,
                            BT_GATT_CHRC_INDICATE,
                            BT_GATT_PERM_NONE ,
                            NULL, NULL, NULL),
-    BT_GATT_DESCRIPTOR(&custom_char_uuid.uuid,
+    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+
+    /* Time Calibration characteristic */
+    BT_GATT_CHARACTERISTIC(&time_constant_char_uuid.uuid,
+        BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+        BT_GATT_PERM_READ,
+        read_time_constant, NULL, NULL),
+    BT_GATT_DESCRIPTOR(&drinking_char_uuid.uuid,
                        BT_GATT_PERM_READ,
                        read_custom, NULL,
                        "Drinking Speed Service"),
@@ -146,6 +172,7 @@ static const struct bt_data ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
     BT_DATA(BT_DATA_NAME_COMPLETE,
             CONFIG_BT_DEVICE_NAME,
+
             strlen(CONFIG_BT_DEVICE_NAME))
 };
 
@@ -230,7 +257,8 @@ void ble_stop_adv()
     }
 }
 
-int init_ble()
+
+int init_ble(uint8_t timer_tick_duration)
 {
     int err;
     k_work_queue_init(&retry_work);
@@ -248,6 +276,8 @@ int init_ble()
         settings_load();
     }
     bt_gatt_cb_register(&gatt_callbacks);
+
+    g_timer_tick_duration = timer_tick_duration;
 
     return err;
 }
@@ -297,23 +327,29 @@ int ble_send_start()
         .data_size_bytes = g_bulk_service.sdu_size
     };
 
+    int err;
+    static uint16_t ram_copy_counter = 0;
+    err = read_counter_from_rom(&ram_copy_counter);
+
     memcpy(tx_buffer, &header, sizeof(header));
     memcpy(tx_buffer + sizeof(header), &g_bulk_service.count, sizeof(g_bulk_service.count));
+    memcpy(tx_buffer + sizeof(header) + sizeof(g_bulk_service.count), &ram_copy_counter, sizeof(ram_copy_counter));
 
     ind_params.attr = &custom_svc.attrs[2];
     ind_params.func = indicate_cb;
     ind_params.data = tx_buffer;
-    ind_params.len = sizeof(header) + sizeof(g_bulk_service.count);
+    ind_params.len = sizeof(header) + sizeof(g_bulk_service.count) + sizeof(ram_copy_counter);
 
     k_sem_reset(&indication_sem);
 
-    int err = bt_gatt_indicate(g_bulk_service.current_conn, &ind_params);
+    err = bt_gatt_indicate(g_bulk_service.current_conn, &ind_params);
     if (err)
     {
         printk("Failed to indicate in send start");
     }
     return err;
 }
+
 
 bool ble_is_sending()
 {
@@ -342,6 +378,7 @@ int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements)
     for (int i = 0; i < COUNT_BYTES(num_elements); i++)
     {
         printk("%02X-", bytes[i]);
+        k_msleep(5);
     }
     printk("\n");
     g_bulk_service.count = num_elements;

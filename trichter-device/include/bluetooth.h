@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 
-int init_ble();
+int init_ble(uint8_t timer_tick_duration);
 void ble_start_adv();
 void ble_stop_adv();
 

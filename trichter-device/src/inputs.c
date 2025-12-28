@@ -235,6 +235,7 @@ void init_gpio_outputs()
 			led.port = NULL;
 		} else {
 			printk("Set up LED at %s pin %d\n", led.port->name, led.pin);
+            gpio_pin_set_dt(&led, 1);
 		}
 	}
 }

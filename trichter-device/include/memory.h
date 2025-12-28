@@ -13,5 +13,6 @@ extern uint32_t global_calibration_value;
 void save_counter_ram_to_rom();
 int init_memory_nv();
 int initialize_and_mount_fs(struct nvs_fs *filesys, const struct device *device, const off_t offset, const uint16_t partition_size);
+int read_counter_from_rom(uint16_t *counter_value);
 
 #endif //APPL_MEMORY_H
