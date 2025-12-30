@@ -1,5 +1,5 @@
 class AppConstants {
-  static const apiBaseUrl = 'https://...';
+  static const apiBaseUrl = 'https://dev.trichter.biertrinkenistgesund.de';
   static const bleDeviceId = 'ABC-123';
 }
 

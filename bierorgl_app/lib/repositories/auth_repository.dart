@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:project_camel/core/constants.dart';
 
 class AuthRepository {
   final Dio _dio = Dio(
-    BaseOptions(baseUrl: 'https://dev.trichter.biertrinkenistgesund.de'),
+    BaseOptions(baseUrl: AppConstants.apiBaseUrl),
   );
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
