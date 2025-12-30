@@ -84,7 +84,8 @@ class DatabaseHelper {
     // Initialen Wert für die Sequence setzen
     await db.insert('Metadata', {'dbSequence': 0});
 
-    print("DATABASE CREATED: Finales Schema (User mit firstname/lastname, syncStatus & localDeletedAt überall) erstellt.");
+    print(
+        "DATABASE CREATED: Finales Schema (User mit firstname/lastname, syncStatus & localDeletedAt überall) erstellt.");
   }
 
   // --- STANDARD CRUD METHODEN ---
@@ -212,5 +213,114 @@ class DatabaseHelper {
     } catch (e) {
       print("Fehler beim Debug-Print: $e");
     }
+  }
+
+// --- Tims Sync Methoden ---
+
+  Future<int> getCurrentDbSequence() async {
+    final db = await database;
+
+    final rows = await db.query(
+      'Metadata',
+      columns: ['dbSequence'],
+      limit: 1,
+    );
+
+    if (rows.isEmpty) {
+      await db.insert('Metadata', {'dbSequence': 0});
+      return 0;
+    }
+
+    final value = rows.first['dbSequence'];
+
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    return 0;
+  }
+
+  Future<int> setDbSequence(int newValue) async {
+    final db = await database;
+
+    final rows = await db.query('Metadata', limit: 1);
+    if (rows.isEmpty) {
+      await db.insert('Metadata', {'dbSequence': newValue});
+    } else {
+      await db.update(
+        'Metadata',
+        {'dbSequence': newValue},
+      );
+    }
+
+    return newValue;
+  }
+
+  Future<void> upsertUserFromServer(Map<String, dynamic> data) async {
+    final db = await database;
+
+    final row = <String, dynamic>{
+      'userID': data['id'],
+      'firstname': data['first_name'],
+      'lastname': data['last_name'],
+      'username': data['username'],
+      'eMail': data['email'],
+      'bio': data['bio'],
+      'localDeletedAt': null,
+      'syncStatus': 'synced',
+    };
+
+    await db.insert(
+      'User',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> upsertEventFromServer(Map<String, dynamic> data) async {
+    final db = await database;
+
+    final row = <String, dynamic>{
+      'eventID': data['id'],
+      'name': data['name'],
+      'description': data['description'],
+      'dateFrom': data['date_from'],
+      'dateTo': data['date_to'],
+      'latitude': (data['latitude'] as num?)?.toDouble(),
+      'longitude': (data['longitude'] as num?)?.toDouble(),
+      'localDeletedAt': null,
+      'syncStatus': 'synced',
+    };
+
+    await db.insert(
+      'Event',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> upsertSessionFromServer(Map<String, dynamic> data) async {
+    final db = await database;
+
+    final row = <String, dynamic>{
+      'sessionID': data['id'],
+      'volumeML': (data['volume'] as num?)?.toInt(),
+      'name': data['name'],
+      'description': data['description'],
+      'latitude': (data['latitude'] as num?)?.toDouble(),
+      'longitude': (data['longitude'] as num?)?.toDouble(),
+      'startedAt': data['started_at'],
+      'userID': data['user'],
+      'eventID': data['event'],
+      'durationMS': (data['duration_ms'] as num?)?.toInt(),
+      'valuesJSON': data['values']?.toString(),
+      'localDeletedAt': data['deleted_at'],
+      'syncStatus': 'synced',
+    };
+
+    await db.insert(
+      'Session',
+      row,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }

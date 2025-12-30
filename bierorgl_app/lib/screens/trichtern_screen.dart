@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/bluetooth_service.dart';
 import 'session_screen.dart';
+import '../services/sync_service.dart';
+import '../repositories/auth_repository.dart';
+
+
+
 
 class TrichternScreen extends ConsumerStatefulWidget {
   const TrichternScreen({super.key});
@@ -13,6 +18,17 @@ class TrichternScreen extends ConsumerStatefulWidget {
 }
 
 class _TrichternScreenState extends ConsumerState<TrichternScreen> {
+
+  late final SyncService _syncService;
+
+  @override
+  void initState() {
+    super.initState();
+    final authRepo = AuthRepository();
+    _syncService = SyncService(authRepository: authRepo);
+  }
+
+
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _timer;
   double _displayTime = 0.0;
@@ -109,7 +125,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F0),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/test'),
+        onPressed: () async { await _syncService.sync();},
         backgroundColor: const Color(0xFFFF9500),
         child: const Icon(Icons.bug_report, color: Colors.white),
       ),
