@@ -18,7 +18,7 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'my_app.db');
     return await openDatabase(
       path,
-      version: 1, // Wir bleiben bei 1, da wir die DB einmal löschen
+      version: 1,
       onCreate: _onCreate,
     );
   }
@@ -32,7 +32,8 @@ class DatabaseHelper {
         surname TEXT,
         username TEXT,
         eMail TEXT,
-        bio TEXT
+        bio TEXT,
+        localDeletedAt TEXT
       )
     ''');
 
@@ -64,7 +65,8 @@ class DatabaseHelper {
         userID TEXT,
         eventID TEXT,
         durationMS INTEGER,
-        valuesJSON TEXT, 
+        valuesJSON TEXT,
+        localDeletedAt TEXT,
         FOREIGN KEY (userID) REFERENCES User (userID) ON DELETE CASCADE,
         FOREIGN KEY (eventID) REFERENCES Event (eventID) ON DELETE CASCADE
       )
@@ -80,10 +82,10 @@ class DatabaseHelper {
     // Initialen Wert für die Sequence setzen
     await db.insert('Metadata', {'dbSequence': 0});
 
-    print("DATABASE CREATED: Alle Tabellen im neuen Schema erstellt.");
+    print("DATABASE CREATED: Alle Tabellen (User, Event, Session, Metadata) inklusive localDeletedAt erstellt.");
   }
 
-  // --- STANDARD CRUD METHODEN (Beispiele für die neuen Felder) ---
+  // --- STANDARD CRUD METHODEN ---
 
   Future<int> insertUser(Map<String, dynamic> user) async {
     Database db = await database;
@@ -102,12 +104,17 @@ class DatabaseHelper {
 
   Future<List<Map<String, dynamic>>> getEvents() async {
     Database db = await database;
-    return await db.query('Event');
+    return await db.query('Event', where: 'localDeletedAt IS NULL');
   }
 
   Future<List<Map<String, dynamic>>> getUsers() async {
     Database db = await database;
-    return await db.query('User');
+    return await db.query('User', where: 'localDeletedAt IS NULL');
+  }
+
+  Future<List<Map<String, dynamic>>> getSessions() async {
+    Database db = await database;
+    return await db.query('Session', where: 'localDeletedAt IS NULL');
   }
 
   // --- LEADERBOARD LOGIK: SESSIONS ---
@@ -123,7 +130,7 @@ class DatabaseHelper {
       FROM Session s
       JOIN User u ON s.userID = u.userID
       LEFT JOIN Event e ON s.eventID = e.eventID
-      WHERE 1=1
+      WHERE s.localDeletedAt IS NULL
     ''';
 
     List<dynamic> args = [];
@@ -159,6 +166,7 @@ class DatabaseHelper {
       AVG(CAST(s.durationMS AS FLOAT) / (CAST(s.volumeML AS FLOAT) / 1000.0)) as avgValue
       FROM Session s
       JOIN User u ON s.userID = u.userID
+      WHERE s.localDeletedAt IS NULL
       GROUP BY s.userID
       ORDER BY avgValue ASC
     ''');
@@ -172,6 +180,7 @@ class DatabaseHelper {
       COUNT(s.sessionID) as avgValue
       FROM Session s
       JOIN User u ON s.userID = u.userID
+      WHERE s.localDeletedAt IS NULL
       GROUP BY s.userID
       ORDER BY avgValue DESC
     ''');
@@ -185,17 +194,13 @@ class DatabaseHelper {
       SUM(s.volumeML) as avgValue
       FROM Session s
       JOIN User u ON s.userID = u.userID
+      WHERE s.localDeletedAt IS NULL
       GROUP BY s.userID
       ORDER BY avgValue DESC
     ''');
   }
 
-
-  Future<List<Map<String, dynamic>>> getSessions() async {
-    Database db = await database;
-    return await db.query('Session');
-  }
-
+  // --- DEBUG HILFE ---
   Future<void> debugPrintTable(String tableName) async {
     try {
       Database db = await database;
