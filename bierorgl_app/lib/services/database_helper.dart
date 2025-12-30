@@ -6,7 +6,6 @@ class DatabaseHelper {
   static Database? _database;
 
   factory DatabaseHelper() => _instance;
-
   DatabaseHelper._internal();
 
   Future<Database> get database async {
@@ -19,13 +18,13 @@ class DatabaseHelper {
     String path = join(await getDatabasesPath(), 'my_app.db');
     return await openDatabase(
       path,
-      version: 1,  // Erhöhe bei Schema-Änderungen und füge onUpgrade hinzu
+      version: 1, // Wir bleiben bei 1, da wir die DB einmal löschen
       onCreate: _onCreate,
     );
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // Tabelle User
+    // 1. USER TABELLE
     await db.execute('''
       CREATE TABLE User (
         userID TEXT PRIMARY KEY,
@@ -37,7 +36,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabelle Event
+    // 2. EVENT TABELLE
     await db.execute('''
       CREATE TABLE Event (
         eventID TEXT PRIMARY KEY,
@@ -46,54 +45,59 @@ class DatabaseHelper {
         dateFrom TEXT,
         dateTo TEXT,
         latitude REAL,
-        longitude REAL
+        longitude REAL,
+        localDeletedAt TEXT,
+        syncStatus TEXT
       )
     ''');
 
-    // Tabelle Session
+    // 3. SESSION TABELLE
     await db.execute('''
       CREATE TABLE Session (
         sessionID TEXT PRIMARY KEY,
-        startedAt TEXT,
-        userID TEXT,
         volumeML INTEGER,
-        durationMS INTEGER,
-        eventID TEXT,
         name TEXT,
         description TEXT,
         latitude REAL,
         longitude REAL,
+        startedAt TEXT,
+        userID TEXT,
+        eventID TEXT,
+        durationMS INTEGER,
+        valuesJSON TEXT, 
         FOREIGN KEY (userID) REFERENCES User (userID) ON DELETE CASCADE,
         FOREIGN KEY (eventID) REFERENCES Event (eventID) ON DELETE CASCADE
       )
     ''');
+
+    // 4. METADATA TABELLE
+    await db.execute('''
+      CREATE TABLE Metadata (
+        dbSequence INTEGER DEFAULT 0
+      )
+    ''');
+
+    // Initialen Wert für die Sequence setzen
+    await db.insert('Metadata', {'dbSequence': 0});
+
+    print("DATABASE CREATED: Alle Tabellen im neuen Schema erstellt.");
   }
 
-  // CRUD für User
+  // --- STANDARD CRUD METHODEN (Beispiele für die neuen Felder) ---
+
   Future<int> insertUser(Map<String, dynamic> user) async {
     Database db = await database;
     return await db.insert('User', user);
   }
 
-  Future<List<Map<String, dynamic>>> getUsers() async {
-    Database db = await database;
-    return await db.query('User');
-  }
-
-  Future<int> updateUser(String userID, Map<String, dynamic> user) async {
-    Database db = await database;
-    return await db.update('User', user, where: 'userID = ?', whereArgs: [userID]);
-  }
-
-  Future<int> deleteUser(String userID) async {
-    Database db = await database;
-    return await db.delete('User', where: 'userID = ?', whereArgs: [userID]);
-  }
-
-  // CRUD für Event
   Future<int> insertEvent(Map<String, dynamic> event) async {
     Database db = await database;
     return await db.insert('Event', event);
+  }
+
+  Future<int> insertSession(Map<String, dynamic> session) async {
+    Database db = await database;
+    return await db.insert('Session', session);
   }
 
   Future<List<Map<String, dynamic>>> getEvents() async {
@@ -101,44 +105,105 @@ class DatabaseHelper {
     return await db.query('Event');
   }
 
-  Future<int> updateEvent(String eventID, Map<String, dynamic> event) async {
+  Future<List<Map<String, dynamic>>> getUsers() async {
     Database db = await database;
-    return await db.update('Event', event, where: 'eventID = ?', whereArgs: [eventID]);
+    return await db.query('User');
   }
 
-  Future<int> deleteEvent(String eventID) async {
-    Database db = await database;
-    return await db.delete('Event', where: 'eventID = ?', whereArgs: [eventID]);
+  // --- LEADERBOARD LOGIK: SESSIONS ---
+  Future<List<Map<String, dynamic>>> getLeaderboardData({
+    String? userID,
+    int? volumeML,
+    String? eventID,
+    String sortBy = 'Schnellste zuerst',
+  }) async {
+    final db = await database;
+    String query = '''
+      SELECT s.*, u.username, u.name as userRealName, e.name as eventName
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      LEFT JOIN Event e ON s.eventID = e.eventID
+      WHERE 1=1
+    ''';
+
+    List<dynamic> args = [];
+    if (userID != null && userID != 'Alle') {
+      query += ' AND s.userID = ?';
+      args.add(userID);
+    }
+    if (volumeML != null) {
+      query += ' AND s.volumeML = ?';
+      args.add(volumeML);
+    }
+    if (eventID != null && eventID != 'Alle') {
+      query += ' AND s.eventID = ?';
+      args.add(eventID);
+    }
+
+    if (sortBy == 'Schnellste zuerst') {
+      query += ' ORDER BY s.durationMS ASC';
+    } else if (sortBy == 'Langsamste zuerst') {
+      query += ' ORDER BY s.durationMS DESC';
+    } else {
+      query += ' ORDER BY s.startedAt DESC';
+    }
+
+    return await db.rawQuery(query, args);
   }
 
-  // CRUD für Session
-  Future<int> insertSession(Map<String, dynamic> session) async {
-    Database db = await database;
-    return await db.insert('Session', session);
+  // --- LEADERBOARD LOGIK: DURCHSCHNITT (Zeit pro Liter) ---
+  Future<List<Map<String, dynamic>>> getLeaderboardAverage() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT u.username, u.name as userRealName,
+      AVG(CAST(s.durationMS AS FLOAT) / (CAST(s.volumeML AS FLOAT) / 1000.0)) as avgValue
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      GROUP BY s.userID
+      ORDER BY avgValue ASC
+    ''');
   }
+
+  // --- LEADERBOARD LOGIK: ANZAHL ---
+  Future<List<Map<String, dynamic>>> getLeaderboardCount() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT u.username, u.name as userRealName,
+      COUNT(s.sessionID) as avgValue
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      GROUP BY s.userID
+      ORDER BY avgValue DESC
+    ''');
+  }
+
+  // --- LEADERBOARD LOGIK: VOLUMEN ---
+  Future<List<Map<String, dynamic>>> getLeaderboardTotalVolume() async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT u.username, u.name as userRealName,
+      SUM(s.volumeML) as avgValue
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      GROUP BY s.userID
+      ORDER BY avgValue DESC
+    ''');
+  }
+
 
   Future<List<Map<String, dynamic>>> getSessions() async {
     Database db = await database;
     return await db.query('Session');
   }
 
-  Future<List<Map<String, dynamic>>> getSessionsForUser(String userID) async {
-    Database db = await database;
-    return await db.query('Session', where: 'userID = ?', whereArgs: [userID]);
-  }
-
-  Future<List<Map<String, dynamic>>> getSessionsForEvent(String eventID) async {
-    Database db = await database;
-    return await db.query('Session', where: 'eventID = ?', whereArgs: [eventID]);
-  }
-
-  Future<int> updateSession(String sessionID, Map<String, dynamic> session) async {
-    Database db = await database;
-    return await db.update('Session', session, where: 'sessionID = ?', whereArgs: [sessionID]);
-  }
-
-  Future<int> deleteSession(String sessionID) async {
-    Database db = await database;
-    return await db.delete('Session', where: 'sessionID = ?', whereArgs: [sessionID]);
+  Future<void> debugPrintTable(String tableName) async {
+    try {
+      Database db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(tableName);
+      print("DEBUG: INHALT DER TABELLE [$tableName] - ${maps.length} Zeilen");
+      for (var row in maps) print(row.toString());
+    } catch (e) {
+      print("Fehler beim Debug-Print: $e");
+    }
   }
 }
