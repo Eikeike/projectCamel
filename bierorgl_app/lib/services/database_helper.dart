@@ -396,10 +396,11 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       'Event',
-      where: 'syncStatus IN (?, ?)',
+      where: 'syncStatus IN (?, ?, ?)',
       whereArgs: [
         SyncStatus.pendingCreate.value,
         SyncStatus.pendingUpdate.value,
+        SyncStatus.pendingDelete.value,
       ],
     );
   }
@@ -408,10 +409,11 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       'Session',
-      where: 'syncStatus IN (?, ?)',
+      where: 'syncStatus IN (?, ?, ?)',
       whereArgs: [
         SyncStatus.pendingCreate.value,
         SyncStatus.pendingUpdate.value,
+        SyncStatus.pendingDelete.value
       ],
     );
   }
@@ -492,7 +494,7 @@ class DatabaseHelper {
       row['syncStatus'] = SyncStatus.pendingCreate.value;
 
       return await db.insert('Event', row);
-    } else {
+    } else { 
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
       final isStillLocalOnly = currentStatus == SyncStatus.pendingCreate.value;
@@ -532,6 +534,7 @@ class DatabaseHelper {
       'eventID': session['eventID'],
       'durationMS': (session['durationMS'] as num?)?.toInt(),
       'valuesJSON': session['valuesJSON']?.toString(),
+      'calibrationFactor': (session['calibrationFactor'] as num?)?.toInt(),
       'localDeletedAt': null,
     };
 
