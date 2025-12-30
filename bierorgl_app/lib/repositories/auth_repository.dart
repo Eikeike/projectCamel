@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:project_camel/core/constants.dart';
 
 class AuthRepository {
   final Dio _dio = Dio(
-    BaseOptions(baseUrl: 'https://dev.trichter.biertrinkenistgesund.de'),
+    BaseOptions(baseUrl: AppConstants.apiBaseUrl),
   );
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
@@ -33,11 +34,13 @@ class AuthRepository {
                 );
 
                 final newAccessToken = response.data['access'];
-                await _storage.write(key: 'access_token', value: newAccessToken);
+                await _storage.write(
+                    key: 'access_token', value: newAccessToken);
 
                 // ursprünglichen Request wiederholen
                 final requestOptions = error.requestOptions;
-                requestOptions.headers['Authorization'] = 'Bearer $newAccessToken';
+                requestOptions.headers['Authorization'] =
+                    'Bearer $newAccessToken';
                 final clonedResponse = await _dio.fetch(requestOptions);
 
                 return handler.resolve(clonedResponse);
@@ -99,11 +102,20 @@ class AuthRepository {
   }
 
   /// Optional: einen Request direkt über AuthRepository machen
-  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) async {
+  Future<Response> get(String path,
+      {Map<String, dynamic>? queryParameters}) async {
     return _dio.get(path, queryParameters: queryParameters);
   }
 
   Future<Response> post(String path, {dynamic data}) async {
     return _dio.post(path, data: data);
+  }
+
+  Future<Response> put(String path, {dynamic data}) async {
+    return _dio.put(path, data: data);
+  }
+
+  Future<Response> delete(String path, {dynamic data}) async {
+    return _dio.delete(path, data: data);
   }
 }
