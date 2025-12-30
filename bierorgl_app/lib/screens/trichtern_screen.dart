@@ -26,9 +26,9 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   @override
   void initState() {
     super.initState();
-    final authRepo = AuthRepository();
-    _syncService = SyncService(authRepository: authRepo);
-
+      final authRepo = AuthRepository();
+      _syncService = SyncService(authRepository: authRepo);
+      
     // Starte einen Timer, der alle 3 Sekunden den Verbindungsstatus prüft.
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       final device = ref.read(bluetoothServiceProvider).connectedDevice;

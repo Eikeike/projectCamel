@@ -1,6 +1,7 @@
 import 'package:project_camel/core/constants.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -133,7 +134,8 @@ class DatabaseHelper {
     return res.isNotEmpty ? res.first : null;
   }
 
-  Future<List<Map<String, dynamic>>> getUserStats(String userID, {int? volumeML}) async {
+  Future<List<Map<String, dynamic>>> getUserStats(String userID,
+      {int? volumeML}) async {
     Database db = await database;
     if (volumeML != null) {
       return await db.query('Session',
@@ -141,8 +143,7 @@ class DatabaseHelper {
           whereArgs: [userID, volumeML]);
     }
     return await db.query('Session',
-        where: 'userID = ? AND localDeletedAt IS NULL',
-        whereArgs: [userID]);
+        where: 'userID = ? AND localDeletedAt IS NULL', whereArgs: [userID]);
   }
 
   Future<Map<String, dynamic>?> getMostFrequentEvent(String userID) async {
@@ -462,6 +463,111 @@ class DatabaseHelper {
       'Session',
       where: 'sessionID = ?',
       whereArgs: [sessionID],
+    );
+  }
+
+  Future<int> saveEventForSync(Map<String, dynamic> event) async {
+    final db = await database;
+    String eventID = event['eventID'] as String? ?? const Uuid().v4();
+
+    final existingRows = await db.query(
+      'Event',
+      where: 'eventID = ?',
+      whereArgs: [eventID],
+      limit: 1,
+    );
+
+    final row = <String, dynamic>{
+      'eventID': eventID,
+      'name': event['name'],
+      'description': event['description'],
+      'dateFrom': event['dateFrom'],
+      'dateTo': event['dateTo'],
+      'latitude': event['latitude'],
+      'longitude': event['longitude'],
+      'localDeletedAt': null,
+    };
+
+    if (existingRows.isEmpty) {
+      row['syncStatus'] = SyncStatus.pendingCreate.value;
+
+      return await db.insert('Event', row);
+    } else {
+      final existing = existingRows.first;
+      final currentStatus = existing['syncStatus'] as String?;
+      final isStillLocalOnly = currentStatus == SyncStatus.pendingCreate.value;
+      row['syncStatus'] = isStillLocalOnly
+          ? SyncStatus.pendingCreate.value
+          : SyncStatus.pendingUpdate.value;
+
+      return await db.update(
+        'Event',
+        row,
+        where: 'eventID = ?',
+        whereArgs: [eventID],
+      );
+    }
+  }
+
+  Future<int> saveSessionForSync(Map<String, dynamic> session) async {
+    final db = await database;
+    String sessionID = session['sessionID'] as String? ?? const Uuid().v4();
+
+    final existingRows = await db.query(
+      'Session',
+      where: 'sessionID = ?',
+      whereArgs: [sessionID],
+      limit: 1,
+    );
+
+    final row = <String, dynamic>{
+      'sessionID': sessionID,
+      'volumeML': (session['volumeML'] as num?)?.toInt(),
+      'name': session['name'],
+      'description': session['description'],
+      'latitude': (session['latitude'] as num?)?.toDouble(),
+      'longitude': (session['longitude'] as num?)?.toDouble(),
+      'startedAt': session['startedAt'],
+      'userID': session['userID'],
+      'eventID': session['eventID'],
+      'durationMS': (session['durationMS'] as num?)?.toInt(),
+      'valuesJSON': session['valuesJSON']?.toString(),
+      'localDeletedAt': null,
+    };
+
+    if (existingRows.isEmpty) {
+      row['syncStatus'] = SyncStatus.pendingCreate.value;
+
+      return await db.insert('Session', row);
+    } else {
+      final existing = existingRows.first;
+      final currentStatus = existing['syncStatus'] as String?;
+      final isStillLocalOnly = currentStatus == SyncStatus.pendingCreate.value;
+      row['syncStatus'] = isStillLocalOnly
+          ? SyncStatus.pendingCreate.value
+          : SyncStatus.pendingUpdate.value;
+
+      return await db.update(
+        'Session',
+        row,
+        where: 'sessionID = ?',
+        whereArgs: [sessionID],
+      );
+    }
+  }
+
+  Future<void> markEventAsDeleted(String eventID) async {
+    final db = await database;
+    final nowIso = DateTime.now().toIso8601String();  
+
+    await db.update(
+      'Event',
+      {
+        'localDeletedAt': nowIso,
+        'syncStatus': SyncStatus.pendingDelete.value,
+      },
+      where: 'eventID = ?',
+      whereArgs: [eventID],
     );
   }
 }
