@@ -3,7 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AuthRepository {
   final Dio _dio = Dio(
-    BaseOptions(baseUrl: 'http://192.168.178.71:8000'),
+    BaseOptions(baseUrl: 'https://dev.trichter.biertrinkenistgesund.de'),
   );
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
