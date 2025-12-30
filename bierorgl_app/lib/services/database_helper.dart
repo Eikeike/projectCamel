@@ -75,7 +75,7 @@ class DatabaseHelper {
         eventID TEXT,
         durationMS INTEGER,
         valuesJSON TEXT,
-        calibrationFactor REAL,
+        calibrationFactor INTEGER,
         localDeletedAt TEXT,
         syncStatus TEXT,
         FOREIGN KEY (userID) REFERENCES User (userID) ON DELETE CASCADE,
@@ -319,9 +319,9 @@ class DatabaseHelper {
   }
 
   Future<void> upsertUserFromServer(
-    Map<String, dynamic> data, {
-    DatabaseExecutor? executor,
-  }) async {
+      Map<String, dynamic> data, {
+        DatabaseExecutor? executor,
+      }) async {
     final db = executor ?? await database;
 
     final row = <String, dynamic>{
@@ -396,10 +396,11 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       'Event',
-      where: 'syncStatus IN (?, ?)',
+      where: 'syncStatus IN (?, ?, ?)',
       whereArgs: [
         SyncStatus.pendingCreate.value,
         SyncStatus.pendingUpdate.value,
+        SyncStatus.pendingDelete.value,
       ],
     );
   }
@@ -408,10 +409,11 @@ class DatabaseHelper {
     final db = await database;
     return db.query(
       'Session',
-      where: 'syncStatus IN (?, ?)',
+      where: 'syncStatus IN (?, ?, ?)',
       whereArgs: [
         SyncStatus.pendingCreate.value,
         SyncStatus.pendingUpdate.value,
+        SyncStatus.pendingDelete.value
       ],
     );
   }
@@ -532,6 +534,7 @@ class DatabaseHelper {
       'eventID': session['eventID'],
       'durationMS': (session['durationMS'] as num?)?.toInt(),
       'valuesJSON': session['valuesJSON']?.toString(),
+      'calibrationFactor': (session['calibrationFactor'] as num?)?.toInt(),
       'localDeletedAt': null,
     };
 
@@ -558,7 +561,7 @@ class DatabaseHelper {
 
   Future<void> markEventAsDeleted(String eventID) async {
     final db = await database;
-    final nowIso = DateTime.now().toIso8601String();  
+    final nowIso = DateTime.now().toIso8601String();
 
     await db.update(
       'Event',
