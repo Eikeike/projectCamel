@@ -41,7 +41,7 @@ class _EventEditScreenState extends State<EventEditScreen> {
 
     if (widget.event == null) {
       eventData['eventID'] = const Uuid().v4();
-      await _dbHelper.insertEvent(eventData);
+      await _dbHelper.saveEventForSync(eventData);
     } else {
       await db.update(
         'Event',

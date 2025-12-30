@@ -42,8 +42,7 @@ class _EventScreenState extends State<EventScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
           TextButton(
             onPressed: () async {
-              final db = await _dbHelper.database;
-              await db.delete('Event', where: 'eventID = ?', whereArgs: [eventID]);
+              await _dbHelper.markEventAsDeleted(eventID);
               if (mounted) Navigator.pop(context);
               _fetchEvents();
             },
