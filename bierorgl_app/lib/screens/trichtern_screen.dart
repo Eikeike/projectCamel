@@ -8,9 +8,6 @@ import 'session_screen.dart';
 import '../services/sync_service.dart';
 import '../repositories/auth_repository.dart';
 
-
-
-
 class TrichternScreen extends ConsumerStatefulWidget {
   const TrichternScreen({super.key});
 
@@ -19,7 +16,6 @@ class TrichternScreen extends ConsumerStatefulWidget {
 }
 
 class _TrichternScreenState extends ConsumerState<TrichternScreen> {
-
   late final SyncService _syncService;
   final Stopwatch _stopwatch = Stopwatch();
   Timer? _timer;
@@ -30,12 +26,12 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   @override
   void initState() {
     super.initState();
+    final authRepo = AuthRepository();
+    _syncService = SyncService(authRepository: authRepo);
+
     // Starte einen Timer, der alle 3 Sekunden den Verbindungsstatus prüft.
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       final device = ref.read(bluetoothServiceProvider).connectedDevice;
-      final authRepo = AuthRepository();
-      _syncService = SyncService(authRepository: authRepo);
-      }
       if (device != null) {
         // Prüfe den aktuellen Status des Geräts
         device.connectionState.first.then((currentState) {
@@ -63,7 +59,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       (bytes[i + 1] << 8) |
       (bytes[i + 2] << 16) |
       (bytes[i + 3] << 24);
-      int ms = ((ticks * factor) / 1000).round();
+      int ms = ((ticks * factor) ~/ 1000);
       result.add(ms);
     }
     return result;
@@ -76,13 +72,16 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
 
     // Lauscht auf Statusänderungen für die Navigation
     ref.listen(bluetoothServiceProvider, (previous, next) {
-      final bool wasJustFinished = (previous?.isSessionFinished == false && next.isSessionFinished == true);
-      final bool isAnotherSessionAlreadyActive = previous?.isSessionActive ?? false;
+      final bool wasJustFinished =
+      (previous?.isSessionFinished == false && next.isSessionFinished == true);
 
-      if (wasJustFinished && !isAnotherSessionAlreadyActive && next.lastDurationMS > 0) {
+      // --- START DER ÄNDERUNG ---
+      if (wasJustFinished && next.lastDurationMS > 0) {
         final rawBytes = next.receivedData.last.timeValues;
         final processed =
         _processBytesTo32Bit(rawBytes, next.calibrationFactor ?? 1.0);
+        // NEU: calibrationFactor wird explizit geholt
+        final calibrationFactor = next.calibrationFactor ?? 1.0;
 
         if (mounted) {
           Navigator.push(
@@ -91,17 +90,28 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
               builder: (context) => SessionScreen(
                 durationMS: next.lastDurationMS,
                 allValues: processed,
+                // NEU: Übergabe des calibrationFactor
+                calibrationFactor: calibrationFactor,
               ),
             ),
-          );
+          ).then((_) {
+            // Dieser Code wird ausgeführt, wenn vom SessionScreen zurücknavigiert wird.
+            // Er setzt den Bluetooth-Status zurück, um eine neue Messung zu ermöglichen.
+            if (mounted) {
+              ref.read(bluetoothServiceProvider.notifier).resetData();
+            }
+          });
         }
       }
+      // --- ENDE DER ÄNDERUNG ---
     });
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F0),
       floatingActionButton: FloatingActionButton(
-        onPressed: () async { await _syncService.sync();},
+        onPressed: () async {
+          await _syncService.sync();
+        },
         backgroundColor: const Color(0xFFFF9500),
         child: const Icon(Icons.bug_report, color: Colors.white),
       ),
@@ -121,7 +131,9 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    isConnected ? 'Bereit zum Ballern!' : 'Trichter nicht verbunden',
+                    isConnected
+                        ? 'Bereit zum Ballern!'
+                        : 'Trichter nicht verbunden',
                     style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                   ),
                 ],
@@ -138,8 +150,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(15)),
                   child: Padding(
-                    padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -194,16 +206,18 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        isConnected ? Icons.sports_bar : Icons.bluetooth_disabled,
+                        isConnected
+                            ? Icons.sports_bar
+                            : Icons.bluetooth_disabled,
                         size: 80,
                         color: isConnected
                             ? const Color(0xFF4CAF50)
                             : const Color(0xFFFF5252),
                       ),
                       const SizedBox(height: 10),
-                      const Text(
-                        'READY',
-                        style: TextStyle(
+                      Text(
+                        bluetoothState.isSessionActive ? 'LÄUFT...' : 'READY',
+                        style: const TextStyle(
                             fontSize: 20, fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -215,9 +229,11 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
             Padding(
               padding: const EdgeInsets.all(30),
               child: Text(
-                "Warte auf ersten Schluck...",
-                style:
-                const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                bluetoothState.isSessionActive
+                    ? "Nicht vom Schlauch gehen!"
+                    : "Warte auf ersten Schluck...",
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w500),
               ),
             ),
           ],
