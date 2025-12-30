@@ -15,7 +15,13 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), 'my_app.db');
+    String path = join(await getDatabasesPath(), 'bierorglDB.db');
+
+    // Prüfen, ob die Datei existiert, BEVOR sqflite sie öffnet
+    bool exists = await databaseExists(path);
+    print("DATABASE DEBUG: Pfad ist $path");
+    print("DATABASE DEBUG: Existiert die Datei? $exists");
+
     return await openDatabase(
       path,
       version: 1,
@@ -67,6 +73,7 @@ class DatabaseHelper {
         eventID TEXT,
         durationMS INTEGER,
         valuesJSON TEXT,
+        calibrationFactor REAL,
         localDeletedAt TEXT,
         syncStatus TEXT,
         FOREIGN KEY (userID) REFERENCES User (userID) ON DELETE CASCADE,
@@ -77,17 +84,20 @@ class DatabaseHelper {
     // 4. METADATA TABELLE
     await db.execute('''
       CREATE TABLE Metadata (
-        dbSequence INTEGER DEFAULT 0
+        dbSequence INTEGER DEFAULT 0,
+        loggedInUserID TEXT
       )
     ''');
 
-    // Initialen Wert für die Sequence setzen
-    await db.insert('Metadata', {'dbSequence': 0});
+    await db.insert('Metadata', {
+      'dbSequence': 0,
+      'loggedInUserID': null,
+    });
 
-    print("DATABASE CREATED: Finales Schema (User mit firstname/lastname, syncStatus & localDeletedAt überall) erstellt.");
+    print("DATABASE CREATED: Finales Schema erstellt.");
   }
 
-  // --- STANDARD CRUD METHODEN ---
+  // --- CRUD METHODEN ---
 
   Future<int> insertUser(Map<String, dynamic> user) async {
     Database db = await database;
@@ -114,12 +124,66 @@ class DatabaseHelper {
     return await db.query('User', where: 'localDeletedAt IS NULL');
   }
 
-  Future<List<Map<String, dynamic>>> getSessions() async {
+  // --- PROFILE & USER HELPERS ---
+
+  Future<Map<String, dynamic>?> getUserByID(String userID) async {
     Database db = await database;
-    return await db.query('Session', where: 'localDeletedAt IS NULL');
+    var res = await db.query('User', where: 'userID = ?', whereArgs: [userID]);
+    return res.isNotEmpty ? res.first : null;
   }
 
-  // --- LEADERBOARD LOGIK: SESSIONS ---
+  Future<List<Map<String, dynamic>>> getUserStats(String userID, {int? volumeML}) async {
+    Database db = await database;
+    if (volumeML != null) {
+      return await db.query('Session',
+          where: 'userID = ? AND volumeML = ? AND localDeletedAt IS NULL',
+          whereArgs: [userID, volumeML]);
+    }
+    return await db.query('Session',
+        where: 'userID = ? AND localDeletedAt IS NULL',
+        whereArgs: [userID]);
+  }
+
+  Future<Map<String, dynamic>?> getMostFrequentEvent(String userID) async {
+    Database db = await database;
+    var res = await db.rawQuery('''
+      SELECT e.name, COUNT(s.sessionID) as count, SUM(s.volumeML) as totalVol
+      FROM Session s
+      JOIN Event e ON s.eventID = e.eventID
+      WHERE s.userID = ? AND s.localDeletedAt IS NULL
+      GROUP BY s.eventID
+      ORDER BY count DESC
+      LIMIT 1
+    ''', [userID]);
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getHistory(String userID) async {
+    Database db = await database;
+    return await db.rawQuery('''
+      SELECT s.*, e.name as eventName
+      FROM Session s
+      LEFT JOIN Event e ON s.eventID = e.eventID
+      WHERE s.userID = ? AND s.localDeletedAt IS NULL
+      ORDER BY s.startedAt DESC
+    ''', [userID]);
+  }
+
+  // --- METADATA HELPERS ---
+
+  Future<void> updateLoggedInUser(String? userID) async {
+    Database db = await database;
+    await db.update('Metadata', {'loggedInUserID': userID});
+  }
+
+  Future<String?> getLoggedInUserID() async {
+    Database db = await database;
+    final List<Map<String, dynamic>> res = await db.query('Metadata');
+    return res.isNotEmpty ? res.first['loggedInUserID'] as String? : null;
+  }
+
+  // --- LEADERBOARD LOGIK ---
+
   Future<List<Map<String, dynamic>>> getLeaderboardData({
     String? userID,
     int? volumeML,
@@ -160,7 +224,7 @@ class DatabaseHelper {
     return await db.rawQuery(query, args);
   }
 
-  // --- LEADERBOARD LOGIK: DURCHSCHNITT (Zeit pro Liter) ---
+  // Hilfsmethoden für Leaderboard-Aggregationen
   Future<List<Map<String, dynamic>>> getLeaderboardAverage() async {
     final db = await database;
     return await db.rawQuery('''
@@ -174,7 +238,6 @@ class DatabaseHelper {
     ''');
   }
 
-  // --- LEADERBOARD LOGIK: ANZAHL ---
   Future<List<Map<String, dynamic>>> getLeaderboardCount() async {
     final db = await database;
     return await db.rawQuery('''
@@ -188,7 +251,6 @@ class DatabaseHelper {
     ''');
   }
 
-  // --- LEADERBOARD LOGIK: VOLUMEN ---
   Future<List<Map<String, dynamic>>> getLeaderboardTotalVolume() async {
     final db = await database;
     return await db.rawQuery('''
@@ -207,7 +269,7 @@ class DatabaseHelper {
     try {
       Database db = await database;
       final List<Map<String, dynamic>> maps = await db.query(tableName);
-      print("DEBUG: INHALT DER TABELLE [$tableName] - ${maps.length} Zeilen");
+      print("DEBUG: [$tableName] - ${maps.length} Zeilen");
       for (var row in maps) print(row.toString());
     } catch (e) {
       print("Fehler beim Debug-Print: $e");

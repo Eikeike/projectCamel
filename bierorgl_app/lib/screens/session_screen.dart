@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import '../services/bluetooth_service.dart';
 import '../services/database_helper.dart';
 
-class SessionScreen extends StatefulWidget {
+class SessionScreen extends ConsumerStatefulWidget {
   final int durationMS;
   final List<int> allValues;
 
@@ -14,10 +16,10 @@ class SessionScreen extends StatefulWidget {
   });
 
   @override
-  State<SessionScreen> createState() => _SessionScreenState();
+  ConsumerState<SessionScreen> createState() => _SessionScreenState();
 }
 
-class _SessionScreenState extends State<SessionScreen> {
+class _SessionScreenState extends ConsumerState<SessionScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   late TextEditingController _nameController;
 
@@ -33,10 +35,19 @@ class _SessionScreenState extends State<SessionScreen> {
   void initState() {
     super.initState();
     String formattedDate =
-        DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
+    DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
     _nameController =
         TextEditingController(text: "Session von: $formattedDate");
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    // Setzt den Bluetooth-Status zurück, wenn der Bildschirm verlassen wird.
+    // Dies stellt sicher, dass der TrichternScreen wieder auf "Bereit" steht.
+    ref.read(bluetoothServiceProvider.notifier).resetData();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -71,7 +82,7 @@ class _SessionScreenState extends State<SessionScreen> {
                   'userID': newId,
                   'name': guestController.text,
                   'username':
-                      'gast_${guestController.text.toLowerCase().replaceAll(' ', '_')}',
+                  'gast_${guestController.text.toLowerCase().replaceAll(' ', '_')}',
                   'eMail': 'gast@bierorgl.de',
                 });
                 await _loadInitialData();
@@ -98,21 +109,21 @@ class _SessionScreenState extends State<SessionScreen> {
 
     if (_nameController.text.isEmpty || _selectedEventID == null) {
       bool confirm = await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Angaben unvollständig'),
-              content: const Text(
-                  'Session-Name oder Event fehlen. Trotzdem speichern?'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Zurück')),
-                TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Ja, egal')),
-              ],
-            ),
-          ) ??
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Angaben unvollständig'),
+          content: const Text(
+              'Session-Name oder Event fehlen. Trotzdem speichern?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Zurück')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Ja, egal')),
+          ],
+        ),
+      ) ??
           false;
       if (!confirm) return;
     }
@@ -138,6 +149,7 @@ class _SessionScreenState extends State<SessionScreen> {
 
       await _dbHelper.insertSession(sessionData);
       if (mounted) {
+        // Die pop-Aktion löst `dispose()` aus, was den Reset durchführt.
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -162,7 +174,9 @@ class _SessionScreenState extends State<SessionScreen> {
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFFF9500),
         foregroundColor: Colors.white,
-        automaticallyImplyLeading: false,
+        // WICHTIG: Erlaubt dem User, per "Zurück"-Geste zu navigieren.
+        // `dispose` fängt auch diesen Fall ab.
+        automaticallyImplyLeading: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -200,12 +214,11 @@ class _SessionScreenState extends State<SessionScreen> {
                     hint: const Text('User wählen'),
                     items: _users
                         .map((u) => DropdownMenuItem(
-                              value: u['userID'] as String,
-                              // ÄNDERUNG HIER: u['username'] statt u['name']
-                              child: Text(u['username'] ??
-                                  u['name'] ??
-                                  'Unbekannter User'),
-                            ))
+                      value: u['userID'] as String,
+                      child: Text(u['username'] ??
+                          u['name'] ??
+                          'Unbekannter User'),
+                    ))
                         .toList(),
                     onChanged: (val) => setState(() => _selectedUserID = val),
                     decoration: const InputDecoration(
@@ -214,6 +227,7 @@ class _SessionScreenState extends State<SessionScreen> {
                         filled: true),
                   ),
                 )
+                // Hier könnte ein Button sein, um einen Gast-User hinzuzufügen
               ],
             ),
             const SizedBox(height: 20),
@@ -236,9 +250,9 @@ class _SessionScreenState extends State<SessionScreen> {
               hint: const Text('Optional: Event zuordnen'),
               items: _events
                   .map((e) => DropdownMenuItem(
-                        value: e['eventID'] as String,
-                        child: Text(e['name'] ?? 'Event'),
-                      ))
+                value: e['eventID'] as String,
+                child: Text(e['name'] ?? 'Event'),
+              ))
                   .toList(),
               onChanged: (val) => setState(() => _selectedEventID = val),
               decoration: const InputDecoration(
@@ -251,7 +265,7 @@ class _SessionScreenState extends State<SessionScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _volChip('0,33L', 330),
                 _volChip('0,5L', 500),
@@ -272,10 +286,10 @@ class _SessionScreenState extends State<SessionScreen> {
                 child: _isSaving
                     ? const CircularProgressIndicator(color: Colors.white)
                     : const Text('FERTIG & SPEICHERN',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 12),
@@ -294,10 +308,12 @@ class _SessionScreenState extends State<SessionScreen> {
   }
 
   Widget _volChip(String label, int ml, {bool custom = false}) {
-    bool selected = _selectedVolumeML == ml;
+    bool selected = !custom && _selectedVolumeML == ml;
+    bool isCustomSelected = custom && ![330, 500].contains(_selectedVolumeML);
+
     return ChoiceChip(
       label: Text(label),
-      selected: selected,
+      selected: selected || isCustomSelected,
       onSelected: (s) {
         if (custom) {
           _showCustomVol();
@@ -306,7 +322,8 @@ class _SessionScreenState extends State<SessionScreen> {
         }
       },
       selectedColor: const Color(0xFFFF9500),
-      labelStyle: TextStyle(color: selected ? Colors.white : Colors.black),
+      labelStyle: TextStyle(
+          color: (selected || isCustomSelected) ? Colors.white : Colors.black),
     );
   }
 
@@ -317,14 +334,20 @@ class _SessionScreenState extends State<SessionScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Eigene Menge (ml)'),
         content: TextField(
-            controller: c, keyboardType: TextInputType.number, autofocus: true),
+            controller: c,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: "z.B. 1000 für 1L")),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Abbrechen')),
           TextButton(
             onPressed: () {
-              setState(() => _selectedVolumeML = int.tryParse(c.text) ?? 0);
+              final int? customVolume = int.tryParse(c.text);
+              if (customVolume != null && customVolume > 0) {
+                setState(() => _selectedVolumeML = customVolume);
+              }
               Navigator.pop(context);
             },
             child: const Text('OK'),
