@@ -1,3 +1,4 @@
+import 'package:project_camel/core/constants.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -269,7 +270,7 @@ class DatabaseHelper {
       'eMail': data['email'],
       'bio': data['bio'],
       'localDeletedAt': null,
-      'syncStatus': 'synced',
+      'syncStatus': SyncStatus.synced.value,
     };
 
     await db.insert(
@@ -291,7 +292,7 @@ class DatabaseHelper {
       'latitude': (data['latitude'] as num?)?.toDouble(),
       'longitude': (data['longitude'] as num?)?.toDouble(),
       'localDeletedAt': null,
-      'syncStatus': 'synced',
+      'syncStatus': SyncStatus.synced.value,
     };
 
     await db.insert(
@@ -317,7 +318,7 @@ class DatabaseHelper {
       'durationMS': (data['duration_ms'] as num?)?.toInt(),
       'valuesJSON': data['values']?.toString(),
       'localDeletedAt': data['deleted_at'],
-      'syncStatus': 'synced',
+      'syncStatus': SyncStatus.synced.value,
     };
 
     await db.insert(
@@ -332,7 +333,10 @@ class DatabaseHelper {
     return db.query(
       'Event',
       where: 'syncStatus IN (?, ?)',
-      whereArgs: ['PENDING_CREATE', 'PENDING_UPDATE'],
+      whereArgs: [
+      SyncStatus.pendingCreate.value,
+      SyncStatus.pendingUpdate.value,
+    ],
     );
   }
 
@@ -341,7 +345,10 @@ class DatabaseHelper {
     return db.query(
       'Session',
       where: 'syncStatus IN (?, ?)',
-      whereArgs: ['PENDING_CREATE', 'PENDING_UPDATE'],
+      whereArgs: [
+      SyncStatus.pendingCreate.value,
+      SyncStatus.pendingUpdate.value,
+    ],
     );
   }
 
@@ -349,7 +356,7 @@ class DatabaseHelper {
     final db = await database;
     await db.update(
       'Event',
-      {'syncStatus': 'synced'},
+      {'syncStatus': SyncStatus.synced.value},
       where: 'eventID = ?',
       whereArgs: [eventID],
     );
@@ -359,7 +366,7 @@ class DatabaseHelper {
     final db = await database;
     await db.update(
       'Session',
-      {'syncStatus': 'synced'},
+      {'syncStatus': SyncStatus.synced.value},
       where: 'sessionID = ?',
       whereArgs: [sessionID],
     );

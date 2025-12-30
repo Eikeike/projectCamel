@@ -1,3 +1,4 @@
+import 'package:project_camel/core/constants.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 import '../repositories/auth_repository.dart';
@@ -138,19 +139,19 @@ class SyncService {
       };
 
       try {
-        if (status == 'PENDING_CREATE') {
+        if (status == SyncStatus.pendingCreate.value) {
           final response = await authRepository.post(
             '/api/events/',
             data: payload,
           );
           print("POST event $id -> ${response.statusCode}");
-        } else if (status == 'PENDING_UPDATE') {
+        } else if (status == SyncStatus.pendingUpdate) {
           final response = await authRepository.put(
             '/api/events/$id/',
             data: payload,
           );
           print("PUT event $id -> ${response.statusCode}");
-        } else if(status == 'PENDING_DELETE'){
+        } else if(status == SyncStatus.pendingDelete.value){
           final response = await authRepository.delete(
             '/api/events/$id/',
           );
@@ -187,19 +188,19 @@ class SyncService {
       };
 
       try {
-        if (status == 'PENDING_CREATE') {
+        if (status == SyncStatus.pendingCreate.value) {
           final response = await authRepository.post(
             '/api/sessions/',
             data: payload,
           );
           print("POST session ${session['sessionID']} -> ${response.statusCode}");
-        } else if (status == 'PENDING_UPDATE') {
+        } else if (status == SyncStatus.pendingUpdate.value) {
           final response = await authRepository.put(
             '/api/sessions/$id/',
             data: payload,
           );
           print("PUT session $id -> ${response.statusCode}");
-        } else if(status == 'PENDING_DELETE'){
+        } else if(status == SyncStatus.pendingDelete.value){
           final response = await authRepository.delete(
             '/api/sessions/$id/',
           );
