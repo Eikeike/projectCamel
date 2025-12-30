@@ -3,8 +3,6 @@ class AppConstants {
   static const bleDeviceId = 'ABC-123';
 }
 
-
-
 enum SyncStatus {
   synced('SYNCED'),
   pendingCreate('PENDING_CREATE'),

@@ -256,11 +256,11 @@ class DatabaseHelper {
     return newValue;
   }
 
-  Future<void> upsertUserFromServer(Map<String, dynamic> data, {
-  DatabaseExecutor? executor,
-}) async {
+  Future<void> upsertUserFromServer(
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await database;
-
 
     final row = <String, dynamic>{
       'userID': data['id'],
@@ -280,7 +280,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> upsertEventFromServer(Map<String, dynamic> data, {DatabaseExecutor? executor}) async {
+  Future<void> upsertEventFromServer(Map<String, dynamic> data,
+      {DatabaseExecutor? executor}) async {
     final db = executor ?? await database;
 
     final row = <String, dynamic>{
@@ -302,7 +303,8 @@ class DatabaseHelper {
     );
   }
 
-  Future<void> upsertSessionFromServer(Map<String, dynamic> data, {DatabaseExecutor? executor}) async {
+  Future<void> upsertSessionFromServer(Map<String, dynamic> data,
+      {DatabaseExecutor? executor}) async {
     final db = executor ?? await database;
 
     final row = <String, dynamic>{
@@ -334,9 +336,9 @@ class DatabaseHelper {
       'Event',
       where: 'syncStatus IN (?, ?)',
       whereArgs: [
-      SyncStatus.pendingCreate.value,
-      SyncStatus.pendingUpdate.value,
-    ],
+        SyncStatus.pendingCreate.value,
+        SyncStatus.pendingUpdate.value,
+      ],
     );
   }
 
@@ -346,9 +348,9 @@ class DatabaseHelper {
       'Session',
       where: 'syncStatus IN (?, ?)',
       whereArgs: [
-      SyncStatus.pendingCreate.value,
-      SyncStatus.pendingUpdate.value,
-    ],
+        SyncStatus.pendingCreate.value,
+        SyncStatus.pendingUpdate.value,
+      ],
     );
   }
 
@@ -372,32 +374,33 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> syncDeleteUserById(String userID,
+      {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    return await db.delete(
+      'User',
+      where: 'userID = ?',
+      whereArgs: [userID],
+    );
+  }
 
-  Future<int> syncDeleteUserById(String userID, {DatabaseExecutor? executor}) async {
-  final db = executor ?? await database;
-  return await db.delete(
-    'User',
-    where: 'userID = ?',
-    whereArgs: [userID],
-  );
-}
+  Future<int> syncDeleteEventById(String eventID,
+      {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    return await db.delete(
+      'Event',
+      where: 'eventID = ?',
+      whereArgs: [eventID],
+    );
+  }
 
-Future<int> syncDeleteEventById(String eventID, {DatabaseExecutor? executor}) async {
-  final db = executor ?? await database;
-  return await db.delete(
-    'Event',
-    where: 'eventID = ?',
-    whereArgs: [eventID],
-  );
-}
-
-Future<int> syncDeleteSessionById(String sessionID, {DatabaseExecutor? executor}) async {
-  final db = executor ?? await database;
-  return await db.delete(
-    'Session',
-    where: 'sessionID = ?',
-    whereArgs: [sessionID],
-  );
-}
-
+  Future<int> syncDeleteSessionById(String sessionID,
+      {DatabaseExecutor? executor}) async {
+    final db = executor ?? await database;
+    return await db.delete(
+      'Session',
+      where: 'sessionID = ?',
+      whereArgs: [sessionID],
+    );
+  }
 }

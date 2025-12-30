@@ -26,13 +26,12 @@ class SyncService {
     print("---Sync.push: ${pendingSessions.length} pending sessions");
 
     await uploadSessions(pendingSessions);
-
   }
 
   Future<void> pull() async {
     print("---Sync.pull---");
 
-    final currentSeq  = 1;//= await _dbHelper.getCurrentDbSequence();
+    final currentSeq = await _dbHelper.getCurrentDbSequence();
     print("currentSeq: $currentSeq");
 
     final response = await authRepository.get(
@@ -45,7 +44,7 @@ class SyncService {
 
     final changes = (body['changes'] as List<dynamic>? ?? []);
     final int newSeq = (body['next_cursor'] as int?) ?? currentSeq;
-    
+
     final db = await _dbHelper.database;
 
     await db.transaction((txn) async {
@@ -73,8 +72,6 @@ class SyncService {
 
       await _dbHelper.setDbSequence(newSeq, executor: txn);
     });
-    final currentSeq2 = await _dbHelper.getCurrentDbSequence();
-    print(currentSeq2);
     // print("SYNC: updated dbSequence to $newSeq");
   }
 
@@ -151,7 +148,7 @@ class SyncService {
             data: payload,
           );
           print("PUT event $id -> ${response.statusCode}");
-        } else if(status == SyncStatus.pendingDelete.value){
+        } else if (status == SyncStatus.pendingDelete.value) {
           final response = await authRepository.delete(
             '/api/events/$id/',
           );
@@ -169,7 +166,8 @@ class SyncService {
     }
   }
 
-  Future<void> uploadSessions(List<Map<String, dynamic>> pendingSessions) async {
+  Future<void> uploadSessions(
+      List<Map<String, dynamic>> pendingSessions) async {
     for (final session in pendingSessions) {
       final status = session['syncStatus'] as String?;
       final id = session['sessionID'] as String;
@@ -193,14 +191,15 @@ class SyncService {
             '/api/sessions/',
             data: payload,
           );
-          print("POST session ${session['sessionID']} -> ${response.statusCode}");
+          print(
+              "POST session ${session['sessionID']} -> ${response.statusCode}");
         } else if (status == SyncStatus.pendingUpdate.value) {
           final response = await authRepository.put(
             '/api/sessions/$id/',
             data: payload,
           );
           print("PUT session $id -> ${response.statusCode}");
-        } else if(status == SyncStatus.pendingDelete.value){
+        } else if (status == SyncStatus.pendingDelete.value) {
           final response = await authRepository.delete(
             '/api/sessions/$id/',
           );
