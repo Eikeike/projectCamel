@@ -48,6 +48,8 @@ dependencies:
 
   flutter_bloc: ^9.1.1
 
+  url_launcher: ^6.3.0
+
 
 
 
@@ -58,3 +60,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/

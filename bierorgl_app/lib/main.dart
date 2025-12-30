@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // NEU für Orientierung
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // NEU
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'cubits/auth_cubit.dart';
 import 'repositories/auth_repository.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/device_selection_screen.dart'; // NEU
+import 'screens/device_selection_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // NEU
+
+  // Erlaube beide Orientierungen
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+
   final authRepository = AuthRepository();
-  // ProviderScope ist zwingend erforderlich für Riverpod!
   runApp(ProviderScope(child: MyApp(authRepository: authRepository)));
 }
 
@@ -32,7 +42,7 @@ class MyApp extends StatelessWidget {
         routes: {
           '/login': (context) => const LoginScreen(),
           '/home': (context) => const HomeScreen(),
-          '/bluetooth': (context) => const DeviceSelectionScreen(), // NEU
+          '/bluetooth': (context) => const DeviceSelectionScreen(),
         },
       ),
     );

@@ -4,10 +4,11 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trichter_data.dart';
 
-// Erweiterung des States um ein Flag für die UI-Steuerung
+// Stand: Die Version, mit der du dich verbinden konntest.
 class TrichterBluetoothStateExtended extends TrichterBluetoothState {
   final bool isSessionFinished;
   final int lastDurationMS;
+  final bool isSessionActive;
 
   const TrichterBluetoothStateExtended({
     super.isEnabled,
@@ -21,6 +22,7 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
     super.startConfigBytes,
     this.isSessionFinished = false,
     this.lastDurationMS = 0,
+    this.isSessionActive = false,
   });
 
   @override
@@ -36,6 +38,7 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
     List<int>? startConfigBytes,
     bool? isSessionFinished,
     int? lastDurationMS,
+    bool? isSessionActive,
   }) {
     return TrichterBluetoothStateExtended(
       isEnabled: isEnabled ?? this.isEnabled,
@@ -47,8 +50,9 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
       error: error ?? this.error,
       calibrationFactor: calibrationFactor ?? this.calibrationFactor,
       startConfigBytes: startConfigBytes ?? this.startConfigBytes,
-      isSessionFinished: isSessionFinished ?? false, // Resetet sich normalerweise
+      isSessionFinished: isSessionFinished ?? this.isSessionFinished,
       lastDurationMS: lastDurationMS ?? this.lastDurationMS,
+      isSessionActive: isSessionActive ?? this.isSessionActive,
     );
   }
 }
@@ -75,14 +79,20 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
   }
 
   void resetData() {
-    state = state.copyWith(receivedData: [], isSessionFinished: false);
+    state = state.copyWith(
+        receivedData: [],
+        isSessionFinished: false,
+        isSessionActive: false
+    );
+  }
+
+  void forceResetState() {
+    state = const TrichterBluetoothStateExtended();
   }
 
   Future<void> _init() async {
     FlutterBluePlus.adapterState.listen((adapterState) {
-      state = state.copyWith(
-        isEnabled: adapterState == BluetoothAdapterState.on,
-      );
+      state = state.copyWith(isEnabled: adapterState == BluetoothAdapterState.on);
     });
   }
 
@@ -114,19 +124,13 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
     }
   }
 
+  // DEINE FUNKTIONIERENDE CONNECT-LOGIK
   Future<void> connectToDevice(BluetoothDevice device) async {
     state = state.copyWith(connectionStatus: BluetoothConnectionStatus.connecting);
     try {
       await device.connect(timeout: const Duration(seconds: 15), autoConnect: false, license: License.free);
-      _connectionSubscription?.cancel();
-      _connectionSubscription = device.connectionState.listen((connectionState) {
-        if (connectionState == BluetoothConnectionState.connected) {
-          state = state.copyWith(connectedDevice: device, connectionStatus: BluetoothConnectionStatus.connected);
-          _setupSessionNotifications(device);
-        } else {
-          state = state.copyWith(connectedDevice: null, connectionStatus: BluetoothConnectionStatus.disconnected);
-        }
-      });
+      state = state.copyWith(connectedDevice: device, connectionStatus: BluetoothConnectionStatus.connected);
+      _setupSessionNotifications(device);
     } catch (e) {
       state = state.copyWith(error: e.toString(), connectionStatus: BluetoothConnectionStatus.disconnected);
     }
@@ -139,14 +143,12 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
         if (service.uuid.toString().toLowerCase() == trichterServiceUuid) {
           for (var characteristic in service.characteristics) {
             String charUuid = characteristic.uuid.toString().toLowerCase();
-
             if (charUuid == calibrationCharacteristicUuid) {
               List<int> value = await characteristic.read();
               if (value.isNotEmpty) {
                 state = state.copyWith(calibrationFactor: value[0].toDouble());
               }
             }
-
             if (charUuid == sessionCharacteristicUuid) {
               await characteristic.setNotifyValue(true);
               _characteristicSubscription?.cancel();
@@ -160,8 +162,6 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
 
   void _handleReceivedData(List<int> rawData) {
     if (rawData.isEmpty) return;
-
-    // 1. START-PAKET (8 Bytes)
     bool isFirstPacket = state.receivedData.isEmpty || (state.receivedData.last.timeValues.isEmpty);
     if (isFirstPacket && rawData.length == 8) {
       state = state.copyWith(
@@ -171,33 +171,22 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
       );
       return;
     }
-
-    // 2. END-PAKET (4 Bytes)
     if (_isEndSequence(rawData)) {
       final rawBytePool = state.receivedData.isNotEmpty ? state.receivedData.last.timeValues : <int>[];
       List<int> ticks = _parseTo32Bit(rawBytePool);
-      List<int> msValues = ticks.map((t) => ((t * state.calibrationFactor) / 1000).round()).toList();
-
+      List<int> msValues = ticks.map((t) => ((t * (state.calibrationFactor ?? 1.0)) / 1000).round()).toList();
       int finalDuration = msValues.isNotEmpty ? msValues.last : 0;
-
       state = state.copyWith(
         isSessionFinished: true,
         lastDurationMS: finalDuration,
+        isSessionActive: true,
       );
       return;
     }
-
-    // 3. DATEN SAMMELN
     List<int> currentPool = state.receivedData.isNotEmpty
         ? List<int>.from(state.receivedData.last.timeValues)
         : [];
-
-    if (rawData.length > 4) {
-      currentPool.addAll(rawData.sublist(4));
-    } else {
-      currentPool.addAll(rawData);
-    }
-
+    currentPool.addAll(rawData);
     state = state.copyWith(receivedData: [
       TrichterData(timeValues: currentPool, timestamp: DateTime.now())
     ]);
