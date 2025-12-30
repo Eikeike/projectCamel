@@ -88,7 +88,7 @@ class DatabaseHelper {
         "DATABASE CREATED: Finales Schema (User mit firstname/lastname, syncStatus & localDeletedAt überall) erstellt.");
   }
 
-  // --- STANDARD CRUD METHODEN ---
+  // --- STANDARD CRUD METHODEN --- // delete is handeld below in dbSync methods
 
   Future<int> insertUser(Map<String, dynamic> user) async {
     Database db = await database;
@@ -323,4 +323,71 @@ class DatabaseHelper {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
+
+  Future<List<Map<String, dynamic>>> getPendingEvents() async {
+    final db = await database;
+    return db.query(
+      'Event',
+      where: 'syncStatus IN (?, ?)',
+      whereArgs: ['PENDING_CREATE', 'PENDING_UPDATE'],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingSessions() async {
+    final db = await database;
+    return db.query(
+      'Session',
+      where: 'syncStatus IN (?, ?)',
+      whereArgs: ['PENDING_CREATE', 'PENDING_UPDATE'],
+    );
+  }
+
+  Future<void> markEventSynced(String eventID) async {
+    final db = await database;
+    await db.update(
+      'Event',
+      {'syncStatus': 'synced'},
+      where: 'eventID = ?',
+      whereArgs: [eventID],
+    );
+  }
+
+  Future<void> markSessionSynced(String sessionID) async {
+    final db = await database;
+    await db.update(
+      'Session',
+      {'syncStatus': 'synced'},
+      where: 'sessionID = ?',
+      whereArgs: [sessionID],
+    );
+  }
+
+
+  Future<int> syncDeleteUserById(String userID) async {
+  final db = await database;
+  return await db.delete(
+    'User',
+    where: 'userID = ?',
+    whereArgs: [userID],
+  );
+}
+
+Future<int> syncDeleteEventById(String eventID) async {
+  final db = await database;
+  return await db.delete(
+    'Event',
+    where: 'eventID = ?',
+    whereArgs: [eventID],
+  );
+}
+
+Future<int> syncDeleteSessionById(String sessionID) async {
+  final db = await database;
+  return await db.delete(
+    'Session',
+    where: 'sessionID = ?',
+    whereArgs: [sessionID],
+  );
+}
+
 }
