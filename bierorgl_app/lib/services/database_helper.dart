@@ -573,4 +573,19 @@ class DatabaseHelper {
       whereArgs: [eventID],
     );
   }
+
+    Future<void> markSessionAsDeleted(String sessionID) async {
+    final db = await database;
+    final nowIso = DateTime.now().toIso8601String();  
+
+    await db.update(
+      'Session',
+      {
+        'localDeletedAt': nowIso,
+        'syncStatus': SyncStatus.pendingDelete.value,
+      },
+      where: 'sessionID = ?',
+      whereArgs: [sessionID],
+    );
+  }
 }
