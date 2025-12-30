@@ -494,7 +494,7 @@ class DatabaseHelper {
       row['syncStatus'] = SyncStatus.pendingCreate.value;
 
       return await db.insert('Event', row);
-    } else {
+    } else { 
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
       final isStillLocalOnly = currentStatus == SyncStatus.pendingCreate.value;
@@ -571,6 +571,21 @@ class DatabaseHelper {
       },
       where: 'eventID = ?',
       whereArgs: [eventID],
+    );
+  }
+
+    Future<void> markSessionAsDeleted(String sessionID) async {
+    final db = await database;
+    final nowIso = DateTime.now().toIso8601String();  
+
+    await db.update(
+      'Session',
+      {
+        'localDeletedAt': nowIso,
+        'syncStatus': SyncStatus.pendingDelete.value,
+      },
+      where: 'sessionID = ?',
+      whereArgs: [sessionID],
     );
   }
 }
