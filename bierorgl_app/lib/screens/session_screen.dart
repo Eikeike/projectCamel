@@ -1,18 +1,24 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+// import 'package:geolocator/geolocator.dart'; // DIESE ZEILE WURDE ENTFERNT
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../services/bluetooth_service.dart';
 import '../services/database_helper.dart';
+import 'package:project_camel/core/constants.dart'; // Pfad ggf. anpassen
 
 class SessionScreen extends ConsumerStatefulWidget {
   final int durationMS;
   final List<int> allValues;
+  final double calibrationFactor;
 
   const SessionScreen({
     super.key,
     required this.durationMS,
     required this.allValues,
+    required this.calibrationFactor,
   });
 
   @override
@@ -30,6 +36,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   String? _selectedEventID;
   int _selectedVolumeML = 500;
   bool _isSaving = false;
+  Position? _currentPosition;
 
   @override
   void initState() {
@@ -38,16 +45,49 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
     _nameController =
         TextEditingController(text: "Session von: $formattedDate");
+
     _loadInitialData();
+    _getCurrentLocation();
+
+    final calculatedVolume = (widget.allValues.length * widget.calibrationFactor);
+    final roundedVolume = (calculatedVolume / 10).round() * 10;
+    if (roundedVolume > 0) {
+      _selectedVolumeML = roundedVolume;
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    // Setzt den Bluetooth-Status zurück, wenn der Bildschirm verlassen wird.
-    // Dies stellt sicher, dass der TrichternScreen wieder auf "Bereit" steht.
     ref.read(bluetoothServiceProvider.notifier).resetData();
     super.dispose();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return;
+      }
+
+      // HINWEIS: Jetzt wird der Typ `LocationPermission` direkt verwendet.
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return;
+      }
+
+      _currentPosition = await Geolocator.getCurrentPosition();
+      setState(() {});
+    } catch (e) {
+      print("Fehler beim Abrufen des Standorts: $e");
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -141,15 +181,18 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         'volumeML': _selectedVolumeML,
         'durationMS': widget.durationMS,
         'eventID': _selectedEventID,
-        'name': _nameController.text,
-        'description': 'Messung: ${widget.allValues.length} Schlucke',
-        'latitude': 0.0,
-        'longitude': 0.0,
+        'name': _nameController.text.isNotEmpty ? _nameController.text : null,
+        'description': null,
+        'latitude': _currentPosition?.latitude ?? 0.0,
+        'longitude': _currentPosition?.longitude ?? 0.0,
+        'valuesJSON': jsonEncode(widget.allValues),
+        'calibrationFactor': widget.calibrationFactor,
+        'localDeletedAt': null,
+        'syncStatus': SyncStatus.pendingCreate.value,
       };
 
       await _dbHelper.insertSession(sessionData);
       if (mounted) {
-        // Die pop-Aktion löst `dispose()` aus, was den Reset durchführt.
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -160,7 +203,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Fehler: $e')));
+            .showSnackBar(SnackBar(content: Text('Fehler beim Speichern: $e')));
       }
     }
   }
@@ -174,8 +217,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFFF9500),
         foregroundColor: Colors.white,
-        // WICHTIG: Erlaubt dem User, per "Zurück"-Geste zu navigieren.
-        // `dispose` fängt auch diesen Fall ab.
         automaticallyImplyLeading: true,
       ),
       body: SingleChildScrollView(
@@ -227,7 +268,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                         filled: true),
                   ),
                 )
-                // Hier könnte ein Button sein, um einen Gast-User hinzuzufügen
               ],
             ),
             const SizedBox(height: 20),
@@ -269,7 +309,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               children: [
                 _volChip('0,33L', 330),
                 _volChip('0,5L', 500),
-                _volChip('Custom', 0, custom: true),
+                _volChip(
+                  ![330, 500].contains(_selectedVolumeML)
+                      ? '${_selectedVolumeML}ml'
+                      : 'Custom',
+                  _selectedVolumeML,
+                  custom: true,
+                ),
               ],
             ),
             const SizedBox(height: 40),
@@ -308,12 +354,12 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   }
 
   Widget _volChip(String label, int ml, {bool custom = false}) {
-    bool selected = !custom && _selectedVolumeML == ml;
-    bool isCustomSelected = custom && ![330, 500].contains(_selectedVolumeML);
+    bool isSelected = !custom && _selectedVolumeML == ml;
+    bool isCustomActive = custom && ![330, 500].contains(_selectedVolumeML);
 
     return ChoiceChip(
       label: Text(label),
-      selected: selected || isCustomSelected,
+      selected: isSelected || isCustomActive,
       onSelected: (s) {
         if (custom) {
           _showCustomVol();
@@ -323,7 +369,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       },
       selectedColor: const Color(0xFFFF9500),
       labelStyle: TextStyle(
-          color: (selected || isCustomSelected) ? Colors.white : Colors.black),
+          color: (isSelected || isCustomActive) ? Colors.white : Colors.black),
     );
   }
 
