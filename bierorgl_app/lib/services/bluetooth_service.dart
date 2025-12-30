@@ -4,7 +4,56 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trichter_data.dart';
 
-class BluetoothService extends Notifier<TrichterBluetoothState> {
+// Erweiterung des States um ein Flag für die UI-Steuerung
+class TrichterBluetoothStateExtended extends TrichterBluetoothState {
+  final bool isSessionFinished;
+  final int lastDurationMS;
+
+  const TrichterBluetoothStateExtended({
+    super.isEnabled,
+    super.isScanning,
+    super.availableDevices,
+    super.connectedDevice,
+    super.connectionStatus,
+    super.receivedData,
+    super.error,
+    super.calibrationFactor,
+    super.startConfigBytes,
+    this.isSessionFinished = false,
+    this.lastDurationMS = 0,
+  });
+
+  @override
+  TrichterBluetoothStateExtended copyWith({
+    bool? isEnabled,
+    bool? isScanning,
+    List<ScanResult>? availableDevices,
+    BluetoothDevice? connectedDevice,
+    BluetoothConnectionStatus? connectionStatus,
+    List<TrichterData>? receivedData,
+    String? error,
+    double? calibrationFactor,
+    List<int>? startConfigBytes,
+    bool? isSessionFinished,
+    int? lastDurationMS,
+  }) {
+    return TrichterBluetoothStateExtended(
+      isEnabled: isEnabled ?? this.isEnabled,
+      isScanning: isScanning ?? this.isScanning,
+      availableDevices: availableDevices ?? this.availableDevices,
+      connectedDevice: connectedDevice ?? this.connectedDevice,
+      connectionStatus: connectionStatus ?? this.connectionStatus,
+      receivedData: receivedData ?? this.receivedData,
+      error: error ?? this.error,
+      calibrationFactor: calibrationFactor ?? this.calibrationFactor,
+      startConfigBytes: startConfigBytes ?? this.startConfigBytes,
+      isSessionFinished: isSessionFinished ?? false, // Resetet sich normalerweise
+      lastDurationMS: lastDurationMS ?? this.lastDurationMS,
+    );
+  }
+}
+
+class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
   static const String trichterServiceUuid = "af56d6dd-3c39-4d67-9bbe-4fb04fa327cc";
   static const String sessionCharacteristicUuid = "f9d76937-bd70-4e4f-a4da-0b718d5f5b6d";
   static const String calibrationCharacteristicUuid = "23de2cad-0fc8-49f4-bbcc-5eb2c9fdb91b";
@@ -14,7 +63,7 @@ class BluetoothService extends Notifier<TrichterBluetoothState> {
   StreamSubscription? _characteristicSubscription;
 
   @override
-  TrichterBluetoothState build() {
+  TrichterBluetoothStateExtended build() {
     ref.onDispose(() {
       _scanSubscription?.cancel();
       _connectionSubscription?.cancel();
@@ -22,11 +71,11 @@ class BluetoothService extends Notifier<TrichterBluetoothState> {
     });
 
     Future.microtask(() => _init());
-    return const TrichterBluetoothState();
+    return const TrichterBluetoothStateExtended();
   }
 
   void resetData() {
-    state = state.copyWith(receivedData: []);
+    state = state.copyWith(receivedData: [], isSessionFinished: false);
   }
 
   Future<void> _init() async {
@@ -91,15 +140,13 @@ class BluetoothService extends Notifier<TrichterBluetoothState> {
           for (var characteristic in service.characteristics) {
             String charUuid = characteristic.uuid.toString().toLowerCase();
 
-            // 1. Kalibrierungswert einmalig lesen
             if (charUuid == calibrationCharacteristicUuid) {
               List<int> value = await characteristic.read();
-                int factorInt = value[0];
-                state = state.copyWith(calibrationFactor: factorInt.toDouble());
-                print("DEBUG: Calibration Factor empfangen: ${state.calibrationFactor}");
+              if (value.isNotEmpty) {
+                state = state.copyWith(calibrationFactor: value[0].toDouble());
+              }
             }
 
-            // 2. Session Notification einrichten
             if (charUuid == sessionCharacteristicUuid) {
               await characteristic.setNotifyValue(true);
               _characteristicSubscription?.cancel();
@@ -120,28 +167,23 @@ class BluetoothService extends Notifier<TrichterBluetoothState> {
       state = state.copyWith(
         startConfigBytes: [rawData[6], rawData[7]],
         receivedData: [TrichterData(timeValues: [], timestamp: DateTime.now())],
+        isSessionFinished: false,
       );
       return;
     }
 
     // 2. END-PAKET (4 Bytes)
     if (_isEndSequence(rawData)) {
-      final rawBytePool = state.receivedData.isNotEmpty
-          ? state.receivedData.last.timeValues
-          : <int>[];
-
-      // WICHTIG: Wir lassen den rawBytePool im State, wie er ist!
-      // Die Berechnung machen wir hier nur für die Konsole:
+      final rawBytePool = state.receivedData.isNotEmpty ? state.receivedData.last.timeValues : <int>[];
       List<int> ticks = _parseTo32Bit(rawBytePool);
       List<int> msValues = ticks.map((t) => ((t * state.calibrationFactor) / 1000).round()).toList();
 
-      print("=======================================");
-      print("FINALE WERTE IN MILLISEKUNDEN:");
-      print(msValues);
-      print("=======================================");
+      int finalDuration = msValues.isNotEmpty ? msValues.last : 0;
 
-      // Wir aktualisieren den State NICHT mit den msValues,
-      // sondern behalten die Bytes, damit dein Screen-Parser funktioniert.
+      state = state.copyWith(
+        isSessionFinished: true,
+        lastDurationMS: finalDuration,
+      );
       return;
     }
 
@@ -160,6 +202,7 @@ class BluetoothService extends Notifier<TrichterBluetoothState> {
       TrichterData(timeValues: currentPool, timestamp: DateTime.now())
     ]);
   }
+
   List<int> _parseTo32Bit(List<int> bytes) {
     List<int> result = [];
     for (int i = 0; i <= bytes.length - 4; i += 4) {
@@ -169,18 +212,9 @@ class BluetoothService extends Notifier<TrichterBluetoothState> {
     return result;
   }
 
-  /// Hilfsfunktion zum Prüfen der End-Sequenz
-  /// Erwartet das Muster [204, 0, 0, 0] (0xCC in Dezimal ist 204)
   bool _isEndSequence(List<int> data) {
-    // Das End-Paket muss exakt 4 Bytes lang sein
-    if (data.length != 4) return false;
-
-    // Prüfung auf 0xCC 0x00 0x00 0x00
-    return data[0] == 0xCC &&
-        data[1] == 0x00 &&
-        data[2] == 0x00 &&
-        data[3] == 0x00;
+    return data.length == 4 && data[0] == 0xCC && data[1] == 0x00 && data[2] == 0x00 && data[3] == 0x00;
   }
 }
 
-final bluetoothServiceProvider = NotifierProvider<BluetoothService, TrichterBluetoothState>(() => BluetoothService());
+final bluetoothServiceProvider = NotifierProvider<BluetoothService, TrichterBluetoothStateExtended>(() => BluetoothService());

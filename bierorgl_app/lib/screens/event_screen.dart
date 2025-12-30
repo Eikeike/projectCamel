@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
-import '../repositories/auth_repository.dart'; // dein AuthRepository importieren
+import '../services/database_helper.dart';
+import 'event_edit_screen.dart'; // Import für den Edit-Screen
 
 class EventScreen extends StatefulWidget {
   const EventScreen({super.key});
@@ -10,8 +10,7 @@ class EventScreen extends StatefulWidget {
 }
 
 class _EventScreenState extends State<EventScreen> {
-  final AuthRepository _authRepo = AuthRepository();
-
+  final DatabaseHelper _dbHelper = DatabaseHelper();
   List<Map<String, dynamic>> events = [];
   bool isLoading = true;
 
@@ -23,141 +22,89 @@ class _EventScreenState extends State<EventScreen> {
 
   Future<void> _fetchEvents() async {
     setState(() => isLoading = true);
-
     try {
-      // AccessToken über AuthRepository holen
-      final accessToken = await _authRepo.getAccessToken();
-      debugPrint('DEBUG: AccessToken aus AuthRepository: $accessToken');
-
-      if (accessToken == null) {
-        debugPrint('DEBUG: Kein AccessToken vorhanden!');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kein AccessToken vorhanden')),
-        );
-        setState(() => isLoading = false);
-        return;
-      }
-
-      debugPrint('DEBUG: Sende GET Request über AuthRepository...');
-      final response = await _authRepo.get('/api/events/');
-      debugPrint('DEBUG: Response StatusCode: ${response.statusCode}');
-      debugPrint('DEBUG: Response Data: ${response.data}');
-
-      setState(() {
-        events = List<Map<String, dynamic>>.from(response.data);
-        debugPrint('DEBUG: ${events.length} Events geladen');
-      });
-    } catch (e, stackTrace) {
-      debugPrint('DEBUG: Fehler beim Laden der Events: $e');
-      debugPrint('DEBUG: StackTrace: $stackTrace');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fehler beim Laden der Events')),
-      );
+      final data = await _dbHelper.getEvents();
+      setState(() => events = data);
+    } catch (e) {
+      debugPrint('Fehler beim Laden: $e');
     } finally {
       setState(() => isLoading = false);
     }
   }
 
-  void _addEvent() {
-    debugPrint('DEBUG: Navigiere zu EventEditScreen (Hinzufügen)');
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const EventEditScreen()),
-    ).then((_) {
-      debugPrint('DEBUG: Rückkehr von EventEditScreen, lade Events neu');
-      _fetchEvents();
-    });
-  }
-
-  void _editEvent(Map<String, dynamic> event) {
-    debugPrint('DEBUG: Navigiere zu EventEditScreen (Bearbeiten) für Event: ${event['name']}');
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EventEditScreen(event: event),
+  void _confirmDelete(String eventID, String name) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Event löschen?'),
+        content: Text('Möchtest du "$name" wirklich löschen?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          TextButton(
+            onPressed: () async {
+              final db = await _dbHelper.database;
+              await db.delete('Event', where: 'eventID = ?', whereArgs: [eventID]);
+              if (mounted) Navigator.pop(context);
+              _fetchEvents();
+            },
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
-    ).then((_) {
-      debugPrint('DEBUG: Rückkehr von EventEditScreen, lade Events neu');
-      _fetchEvents();
-    });
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFFF8F0),
       appBar: AppBar(
-        title: const Text('Events'),
+        title: const Text('Events', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFFF9500),
+        foregroundColor: Colors.white,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addEvent,
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const EventEditScreen()),
+        ).then((_) => _fetchEvents()),
         backgroundColor: const Color(0xFFFF9500),
-        child: const Icon(Icons.add),
-        tooltip: 'Neues Event hinzufügen',
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF9500)))
           : events.isEmpty
-          ? const Center(child: Text('Keine Events vorhanden'))
+          ? const Center(child: Text('Keine Events angelegt'))
           : ListView.builder(
         itemCount: events.length,
+        padding: const EdgeInsets.symmetric(vertical: 12),
         itemBuilder: (context, index) {
           final event = events[index];
           return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: ListTile(
+              leading: const Icon(Icons.celebration, color: Color(0xFFFF9500)),
               title: Text(event['name'] ?? 'Unbekannt'),
               subtitle: Text(event['description'] ?? ''),
-              trailing: IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: () => _editEvent(event),
+              trailing: PopupMenuButton<String>(
+                onSelected: (val) {
+                  if (val == 'edit') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => EventEditScreen(event: event)),
+                    ).then((_) => _fetchEvents());
+                  } else if (val == 'delete') {
+                    _confirmDelete(event['eventID'], event['name']);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                  const PopupMenuItem(value: 'delete', child: Text('Löschen', style: TextStyle(color: Colors.red))),
+                ],
               ),
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-// Placeholder für EventEditScreen (Neues Event hinzufügen oder bearbeiten)
-class EventEditScreen extends StatelessWidget {
-  final Map<String, dynamic>? event;
-  const EventEditScreen({super.key, this.event});
-
-  @override
-  Widget build(BuildContext context) {
-    final isEditing = event != null;
-    debugPrint('DEBUG: EventEditScreen geöffnet, isEditing: $isEditing');
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(isEditing ? 'Event bearbeiten' : 'Neues Event'),
-        backgroundColor: const Color(0xFFFF9500),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              decoration: const InputDecoration(labelText: 'Event Name'),
-              controller: TextEditingController(text: event?['name'] ?? ''),
-            ),
-            TextField(
-              decoration: const InputDecoration(labelText: 'Beschreibung'),
-              controller: TextEditingController(text: event?['description'] ?? ''),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                debugPrint('DEBUG: Speichern/Erstellen Button gedrückt (noch keine API Call implementiert)');
-              },
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF9500)),
-              child: Text(isEditing ? 'Speichern' : 'Erstellen'),
-            ),
-          ],
-        ),
       ),
     );
   }
