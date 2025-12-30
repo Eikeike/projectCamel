@@ -9,7 +9,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.background,
+      backgroundColor: Theme.of(context).colorScheme.surface, // 'background' ist in neueren Flutter-Versionen deprecated
       body: BlocListener<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
@@ -24,13 +24,22 @@ class LoginScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Text(
+              children: [
+                const Text(
                   'Bierorgl-Login',
                   style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
-                SizedBox(height: 32),
-                LoginForm(),
+                const SizedBox(height: 32),
+                const LoginForm(),
+
+                // Der einfache Bypass Button
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacementNamed(context, '/home');
+                  },
+                  child: const Text('Admin Skip (Direkt zu Home)'),
+                ),
               ],
             ),
           ),

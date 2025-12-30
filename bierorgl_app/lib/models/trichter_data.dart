@@ -1,17 +1,16 @@
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothState;
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 /// Repräsentiert die Daten von einem Trichtervorgang
 class TrichterData {
-  final List<int> timeValues; // Zeitwerte in Millisekunden
+  final List<int> timeValues; // Zeitwerte in Millisekunden (jetzt berechnet)
   final DateTime timestamp;
-  final int totalTime; // Berechnete Gesamtzeit
+  final int totalTime;
 
   TrichterData({
     required this.timeValues,
     required this.timestamp,
   }) : totalTime = timeValues.fold(0, (sum, value) => sum + value);
 
-  /// Berechnet die Durchschnittszeit
   double get averageTime =>
       timeValues.isEmpty ? 0 : totalTime / timeValues.length;
 }
@@ -34,7 +33,12 @@ class TrichterBluetoothState {
   final List<TrichterData> receivedData;
   final String? error;
 
-  /// ✅ RICHTIGER Konstruktor (Name = Klassenname)
+  // Kalibrierungsfaktor vom ESP32
+  final double calibrationFactor;
+
+  // NEU: Speichert die Bytes 7 & 8 vom 8-Byte Start-Paket
+  final List<int> startConfigBytes;
+
   const TrichterBluetoothState({
     this.isEnabled = false,
     this.isScanning = false,
@@ -43,6 +47,8 @@ class TrichterBluetoothState {
     this.connectionStatus = BluetoothConnectionStatus.disconnected,
     this.receivedData = const [],
     this.error,
+    this.calibrationFactor = 1.0,
+    this.startConfigBytes = const [], // Standardmäßig leer
   });
 
   TrichterBluetoothState copyWith({
@@ -53,6 +59,8 @@ class TrichterBluetoothState {
     BluetoothConnectionStatus? connectionStatus,
     List<TrichterData>? receivedData,
     String? error,
+    double? calibrationFactor,
+    List<int>? startConfigBytes, // Hinzugefügt für copyWith
   }) {
     return TrichterBluetoothState(
       isEnabled: isEnabled ?? this.isEnabled,
@@ -62,6 +70,8 @@ class TrichterBluetoothState {
       connectionStatus: connectionStatus ?? this.connectionStatus,
       receivedData: receivedData ?? this.receivedData,
       error: error ?? this.error,
+      calibrationFactor: calibrationFactor ?? this.calibrationFactor,
+      startConfigBytes: startConfigBytes ?? this.startConfigBytes,
     );
   }
 
