@@ -182,6 +182,7 @@ class SyncService {
         'longitude': session['longitude'],
         'started_at': session['startedAt'],
         'duration_ms': session['durationMS'],
+        'calibration_factor': session['calibrationFactor'],
         'description': session['description'],
       };
 
