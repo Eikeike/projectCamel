@@ -28,12 +28,13 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE User (
         userID TEXT PRIMARY KEY,
-        name TEXT,
-        surname TEXT,
+        firstname TEXT,
+        lastname TEXT,
         username TEXT,
         eMail TEXT,
         bio TEXT,
-        localDeletedAt TEXT
+        localDeletedAt TEXT,
+        syncStatus TEXT
       )
     ''');
 
@@ -67,6 +68,7 @@ class DatabaseHelper {
         durationMS INTEGER,
         valuesJSON TEXT,
         localDeletedAt TEXT,
+        syncStatus TEXT,
         FOREIGN KEY (userID) REFERENCES User (userID) ON DELETE CASCADE,
         FOREIGN KEY (eventID) REFERENCES Event (eventID) ON DELETE CASCADE
       )
@@ -82,7 +84,7 @@ class DatabaseHelper {
     // Initialen Wert für die Sequence setzen
     await db.insert('Metadata', {'dbSequence': 0});
 
-    print("DATABASE CREATED: Alle Tabellen (User, Event, Session, Metadata) inklusive localDeletedAt erstellt.");
+    print("DATABASE CREATED: Finales Schema (User mit firstname/lastname, syncStatus & localDeletedAt überall) erstellt.");
   }
 
   // --- STANDARD CRUD METHODEN ---
@@ -126,7 +128,7 @@ class DatabaseHelper {
   }) async {
     final db = await database;
     String query = '''
-      SELECT s.*, u.username, u.name as userRealName, e.name as eventName
+      SELECT s.*, u.username, (u.firstname || ' ' || u.lastname) as userRealName, e.name as eventName
       FROM Session s
       JOIN User u ON s.userID = u.userID
       LEFT JOIN Event e ON s.eventID = e.eventID
@@ -162,7 +164,7 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getLeaderboardAverage() async {
     final db = await database;
     return await db.rawQuery('''
-      SELECT u.username, u.name as userRealName,
+      SELECT u.username, (u.firstname || ' ' || u.lastname) as userRealName,
       AVG(CAST(s.durationMS AS FLOAT) / (CAST(s.volumeML AS FLOAT) / 1000.0)) as avgValue
       FROM Session s
       JOIN User u ON s.userID = u.userID
@@ -176,7 +178,7 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getLeaderboardCount() async {
     final db = await database;
     return await db.rawQuery('''
-      SELECT u.username, u.name as userRealName,
+      SELECT u.username, (u.firstname || ' ' || u.lastname) as userRealName,
       COUNT(s.sessionID) as avgValue
       FROM Session s
       JOIN User u ON s.userID = u.userID
@@ -190,7 +192,7 @@ class DatabaseHelper {
   Future<List<Map<String, dynamic>>> getLeaderboardTotalVolume() async {
     final db = await database;
     return await db.rawQuery('''
-      SELECT u.username, u.name as userRealName,
+      SELECT u.username, (u.firstname || ' ' || u.lastname) as userRealName,
       SUM(s.volumeML) as avgValue
       FROM Session s
       JOIN User u ON s.userID = u.userID
