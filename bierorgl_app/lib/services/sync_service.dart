@@ -1,3 +1,4 @@
+import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 import '../repositories/auth_repository.dart';
 
@@ -43,56 +44,59 @@ class SyncService {
 
     final changes = (body['changes'] as List<dynamic>? ?? []);
     final int newSeq = (body['next_cursor'] as int?) ?? currentSeq;
+    
+    final db = await _dbHelper.database;
 
-    for (final dynamic changeRaw in changes) {
-      final change = changeRaw as Map<String, dynamic>;
-      final String type = change['type'] as String;
-      final String op = change['op'] as String;
-      final dynamic data = change['data'];
-      final String id = change['id'] as String;
+    await db.transaction((txn) async {
+      for (final dynamic changeRaw in changes) {
+        final change = changeRaw as Map<String, dynamic>;
+        final String type = change['type'] as String;
+        final String op = change['op'] as String;
+        final dynamic data = change['data'];
+        final String id = change['id'] as String;
 
-      print("Handling change: type=$type, op=$op, id=$id, data=$data");
+        print("Handling change: type=$type, op=$op, id=$id, data=$data");
 
-      // Sicherstellen, dass data ein Map ist
-      final Map<String, dynamic>? dataMap =
-          data is Map<String, dynamic> ? data : null;
+        // Sicherstellen, dass data ein Map ist
+        final Map<String, dynamic>? dataMap =
+            data is Map<String, dynamic> ? data : null;
 
-      if (op == 'upsert') {
-        await upsert(type, dataMap);
-      } else if (op == 'delete') {
-        await delete(type, id);
-      } else {
-        print("Unknown op: $op");
+        if (op == 'upsert') {
+          await upsert(type, dataMap, executor: txn);
+        } else if (op == 'delete') {
+          await delete(type, id, executor: txn);
+        } else {
+          print("Unknown op: $op");
+        }
       }
-    }
 
-    await _dbHelper.setDbSequence(newSeq);
-
+      await _dbHelper.setDbSequence(newSeq, executor: txn);
+    });
     final currentSeq2 = await _dbHelper.getCurrentDbSequence();
     print(currentSeq2);
     // print("SYNC: updated dbSequence to $newSeq");
   }
 
-  Future<void> upsert(type, dataMap) async {
+  Future<void> upsert(type, dataMap, {DatabaseExecutor? executor}) async {
     switch (type) {
       case 'user':
         if (dataMap != null) {
           print("upsert user: $dataMap");
-          await _dbHelper.upsertUserFromServer(dataMap);
+          await _dbHelper.upsertUserFromServer(dataMap, executor: executor);
         } else {
           print("WARN: user change received empty dataMap");
         }
         break;
       case 'event':
         if (dataMap != null) {
-          await _dbHelper.upsertEventFromServer(dataMap);
+          await _dbHelper.upsertEventFromServer(dataMap, executor: executor);
         } else {
           print("WARN: event change received empty dataMap");
         }
         break;
       case 'session':
         if (dataMap != null) {
-          await _dbHelper.upsertSessionFromServer(dataMap);
+          await _dbHelper.upsertSessionFromServer(dataMap, executor: executor);
         } else {
           print("WARN: session change received empty dataMap");
         }
@@ -102,17 +106,17 @@ class SyncService {
     }
   }
 
-  Future<void> delete(type, id) async {
+  Future<void> delete(type, id, {DatabaseExecutor? executor}) async {
     print("---Enter delete---");
     switch (type) {
       case 'user':
-        await _dbHelper.syncDeleteUserById(id);
+        await _dbHelper.syncDeleteUserById(id, executor: executor);
         break;
       case 'event':
-        await _dbHelper.syncDeleteEventById(id);
+        await _dbHelper.syncDeleteEventById(id, executor: executor);
         break;
       case 'session':
-        await _dbHelper.syncDeleteSessionById(id);
+        await _dbHelper.syncDeleteSessionById(id, executor: executor);
         break;
       default:
         print("Unknown type for delete: $type");
