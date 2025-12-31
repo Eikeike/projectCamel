@@ -235,7 +235,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             children: [
               Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.grey[600]),
               const SizedBox(width: 4),
-              Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.grey[600])),
+              Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.grey[600])),
             ],
           ),
         ),
@@ -270,7 +270,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(color: isSelected ? const Color(0xFFFF9500) : Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.grey[700])),
+          child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.grey[700])),
         ),
       ),
     );
@@ -289,7 +289,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text(sub, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              Text(sub, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
             ]),
           ),
           Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFF9500))),

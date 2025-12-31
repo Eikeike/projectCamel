@@ -191,7 +191,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Angaben unvollständig'),
           content: const Text(
-              'Session-Name oder Event fehlen. Trotzdem speichern?'),
+              'Titel der Trichterung oder Event fehlen. Trotzdem speichern?'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
@@ -286,7 +286,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                 ),
               ),
             const SizedBox(height: 32),
-            const Text('WER HAT GETRICHTERT? *',
+            const Text('Wer hat getrichtert? *',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Row(
@@ -314,7 +314,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            const Text('NAME DER TRICHTERUNG',
+            const Text('Titel der Trichterung',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             TextField(
@@ -325,7 +325,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   filled: true),
             ),
             const SizedBox(height: 20),
-            const Text('EVENT', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Event', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               isExpanded: true,
@@ -344,7 +344,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   filled: true),
             ),
             const SizedBox(height: 20),
-            const Text('VOLUMEN',
+            const Text('Volumen',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
 
@@ -390,7 +390,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                     : Text(_isEditing ? 'ÄNDERUNGEN SPEICHERN' : 'FERTIG & SPEICHERN',
                     style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold)),
               ),
             ),

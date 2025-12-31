@@ -332,10 +332,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Icon(icon, color: iconColor, size: 24),
           ),
           const SizedBox(height: 12),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[600], fontWeight: FontWeight.w500)),
           const SizedBox(height: 4),
           Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
         ],
       ),
     );
@@ -387,14 +387,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(mostEvent['name'] ?? 'Event', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
-                      Text('Gesamt: ${((mostEvent['totalVol'] ?? 0) / 1000).toStringAsFixed(1)}L', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      Text('Gesamt: ${((mostEvent['totalVol'] ?? 0) / 1000).toStringAsFixed(1)}L', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
                     ],
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: const Color(0xFFFF9500), borderRadius: BorderRadius.circular(12)),
-                  child: Text('${mostEvent['count']}x', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                  child: Text('${mostEvent['count']}x', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
               ],
             )
@@ -464,10 +464,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(Icons.calendar_today, size: 12, color: Colors.grey[600]),
             const SizedBox(width: 6),
-            Text(date, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text(date, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
             const SizedBox(width: 16),
             Expanded(child: Text(event, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
-            Text(volume, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text(volume, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
             PopupMenuButton<String>(
               onSelected: (val) {
                 if (val == 'edit') {
@@ -496,7 +496,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(time, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFFFF9500))),
-            Text(flow, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            Text(flow, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
           ],
         ),
       ],
