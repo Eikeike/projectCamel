@@ -381,6 +381,7 @@ class DatabaseHelper {
       'eventID': data['event'],
       'durationMS': (data['duration_ms'] as num?)?.toInt(),
       'valuesJSON': data['values']?.toString(),
+      'calibrationFactor': (data['calibration_factor'] as num?)?.toInt(),
       'localDeletedAt': data['deleted_at'],
       'syncStatus': SyncStatus.synced.value,
     };
