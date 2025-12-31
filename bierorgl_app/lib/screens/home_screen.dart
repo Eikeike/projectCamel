@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:project_camel/services/auto_sync_controller.dart';
 import 'trichtern_screen.dart';
 import 'leaderboard_screen.dart';
 import 'profile_screen.dart';
 import 'event_screen.dart'; // Import für deinen neuen Screen
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    required this.autoSyncController,
+  });
+
+  final AutoSyncController autoSyncController;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -13,6 +19,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  AutoSyncController get autoSyncController => widget.autoSyncController;
+
+
 
   final List<Widget> _screens = [
     const TrichternScreen(),
@@ -41,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _currentIndex = index;
             });
+            autoSyncController.triggerSync();
           },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,

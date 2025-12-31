@@ -1,6 +1,7 @@
 class AppConstants {
   static const apiBaseUrl = 'https://dev.trichter.biertrinkenistgesund.de';
   static const bleDeviceId = 'ABC-123';
+  static const autoSyncDebounceIntervalSeconds = 7; //ja ich weiß geiler name
 }
 
 enum SyncStatus {

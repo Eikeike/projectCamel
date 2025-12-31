@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // NEU für Orientierung
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/services/auto_sync_controller.dart';
+import 'package:project_camel/services/sync_service.dart';
 import 'cubits/auth_cubit.dart';
 import 'repositories/auth_repository.dart';
 import 'screens/login_screen.dart';
@@ -18,15 +20,21 @@ void main() async {
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-
   final authRepository = AuthRepository();
-  runApp(ProviderScope(child: MyApp(authRepository: authRepository)));
+  final syncService = SyncService(authRepository: authRepository);
+  final autoSyncController = AutoSyncController(syncService);
+
+  runApp(ProviderScope(
+      child: MyApp(
+          authRepository: authRepository,
+          autoSyncController: autoSyncController)));
 }
 
 class MyApp extends StatelessWidget {
   final AuthRepository authRepository;
+  final AutoSyncController autoSyncController;
 
-  const MyApp({super.key, required this.authRepository});
+  const MyApp({super.key, required this.authRepository, required this.autoSyncController});
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +49,7 @@ class MyApp extends StatelessWidget {
         ),
         routes: {
           '/login': (context) => const LoginScreen(),
-          '/home': (context) => const HomeScreen(),
+          '/home': (context) =>  HomeScreen(autoSyncController: autoSyncController,),
           '/bluetooth': (context) => const DeviceSelectionScreen(),
         },
       ),
