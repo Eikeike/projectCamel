@@ -495,7 +495,7 @@ class DatabaseHelper {
       row['syncStatus'] = SyncStatus.pendingCreate.value;
 
       return await db.insert('Event', row);
-    } else { 
+    } else {
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
       final isStillLocalOnly = currentStatus == SyncStatus.pendingCreate.value;
@@ -512,16 +512,10 @@ class DatabaseHelper {
     }
   }
 
-  Future<int> saveSessionForSync(Map<String, dynamic> session) async {
+  Future<int> saveSessionForSync(Map<String, dynamic> session, {bool isEditing = false}) async {
     final db = await database;
     String sessionID = session['sessionID'] as String? ?? const Uuid().v4();
-
-    final existingRows = await db.query(
-      'Session',
-      where: 'sessionID = ?',
-      whereArgs: [sessionID],
-      limit: 1,
-    );
+    print("DEBUG_ML (database_helper): saveSessionForSync aufgerufen für sessionID $sessionID. isEditing: $isEditing");
 
     final row = <String, dynamic>{
       'sessionID': sessionID,
@@ -539,18 +533,43 @@ class DatabaseHelper {
       'localDeletedAt': null,
     };
 
-    if (existingRows.isEmpty) {
+    if (!isEditing) {
+      // Immer PENDING_CREATE, wenn es eine neue Session vom Trichter ist
       row['syncStatus'] = SyncStatus.pendingCreate.value;
-
-      return await db.insert('Session', row);
+      print("DEBUG_ML (database_helper): Neue Session wird erstellt. Status: ${row['syncStatus']}.");
+      print("DEBUG_ML (database_helper): Schreibe in DB: $row");
+      return await db.insert('Session', row, conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
+      // Wenn wir im Bearbeitungsmodus sind, prüfen wir den bestehenden Status
+      final existingRows = await db.query(
+        'Session',
+        where: 'sessionID = ?',
+        whereArgs: [sessionID],
+        limit: 1,
+      );
+
+      if (existingRows.isEmpty) {
+        // Sollte nicht passieren im Bearbeitungsmodus, aber als Fallback
+        row['syncStatus'] = SyncStatus.pendingCreate.value;
+        print("DEBUG_ML (database_helper): Bearbeitungsmodus, aber Session nicht gefunden. Erstelle sie neu. Status: ${row['syncStatus']}.");
+        print("DEBUG_ML (database_helper): Schreibe in DB: $row");
+        return await db.insert('Session', row);
+      }
+
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
-      final isStillLocalOnly = currentStatus == SyncStatus.pendingCreate.value;
-      row['syncStatus'] = isStillLocalOnly
-          ? SyncStatus.pendingCreate.value
-          : SyncStatus.pendingUpdate.value;
+      print("DEBUG_ML (database_helper): Bestehende Session gefunden. Aktueller syncStatus: $currentStatus");
 
+      // Wenn sie noch nie gesynct wurde, bleibt sie PENDING_CREATE
+      if (currentStatus == SyncStatus.pendingCreate.value) {
+        row['syncStatus'] = SyncStatus.pendingCreate.value;
+      } else {
+        // Ansonsten wird sie auf PENDING_UPDATE gesetzt
+        row['syncStatus'] = SyncStatus.pendingUpdate.value;
+      }
+
+      print("DEBUG_ML (database_helper): Session wird aktualisiert. Neuer Status: ${row['syncStatus']}.");
+      print("DEBUG_ML (database_helper): Schreibe in DB: $row");
       return await db.update(
         'Session',
         row,
@@ -575,9 +594,9 @@ class DatabaseHelper {
     );
   }
 
-    Future<void> markSessionAsDeleted(String sessionID) async {
+  Future<void> markSessionAsDeleted(String sessionID) async {
     final db = await database;
-    final nowIso = DateTime.now().toIso8601String();  
+    final nowIso = DateTime.now().toIso8601String();
 
     await db.update(
       'Session',

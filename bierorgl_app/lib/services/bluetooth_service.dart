@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data'; // Benötigt für ByteData
 import 'package:flutter_blue_plus/flutter_blue_plus.dart' hide BluetoothState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/trichter_data.dart';
@@ -9,6 +10,7 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
   final bool isSessionFinished;
   final int lastDurationMS;
   final bool isSessionActive;
+  final int? volumeCalibrationFactor; // NEU: Für den Faktor aus dem Start-Array
 
   const TrichterBluetoothStateExtended({
     super.isEnabled,
@@ -18,11 +20,12 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
     super.connectionStatus,
     super.receivedData,
     super.error,
-    super.calibrationFactor,
+    super.calibrationFactor, // Das ist der 'Time' Faktor
     super.startConfigBytes,
     this.isSessionFinished = false,
     this.lastDurationMS = 0,
     this.isSessionActive = false,
+    this.volumeCalibrationFactor, // NEU
   });
 
   @override
@@ -39,6 +42,7 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
     bool? isSessionFinished,
     int? lastDurationMS,
     bool? isSessionActive,
+    int? volumeCalibrationFactor, // NEU
   }) {
     return TrichterBluetoothStateExtended(
       isEnabled: isEnabled ?? this.isEnabled,
@@ -53,6 +57,7 @@ class TrichterBluetoothStateExtended extends TrichterBluetoothState {
       isSessionFinished: isSessionFinished ?? this.isSessionFinished,
       lastDurationMS: lastDurationMS ?? this.lastDurationMS,
       isSessionActive: isSessionActive ?? this.isSessionActive,
+      volumeCalibrationFactor: volumeCalibrationFactor ?? this.volumeCalibrationFactor, // NEU
     );
   }
 }
@@ -80,9 +85,10 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
 
   void resetData() {
     state = state.copyWith(
-        receivedData: [],
-        isSessionFinished: false,
-        isSessionActive: false
+      receivedData: [],
+      isSessionFinished: false,
+      isSessionActive: false,
+      volumeCalibrationFactor: null, // Auch den neuen Faktor zurücksetzen
     );
   }
 
@@ -124,7 +130,6 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
     }
   }
 
-  // DEINE FUNKTIONIERENDE CONNECT-LOGIK
   Future<void> connectToDevice(BluetoothDevice device) async {
     state = state.copyWith(connectionStatus: BluetoothConnectionStatus.connecting);
     try {
@@ -146,6 +151,8 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
             if (charUuid == calibrationCharacteristicUuid) {
               List<int> value = await characteristic.read();
               if (value.isNotEmpty) {
+                // DAS IST DER "calibrationFactorTime"
+                print("DEBUG_ML (bluetooth_service): 'calibrationFactorTime' vom Gerät gelesen: ${value[0].toDouble()}");
                 state = state.copyWith(calibrationFactor: value[0].toDouble());
               }
             }
@@ -162,31 +169,78 @@ class BluetoothService extends Notifier<TrichterBluetoothStateExtended> {
 
   void _handleReceivedData(List<int> rawData) {
     if (rawData.isEmpty) return;
+
     bool isFirstPacket = state.receivedData.isEmpty || (state.receivedData.last.timeValues.isEmpty);
+
     if (isFirstPacket && rawData.length == 8) {
+      String hexString = rawData.map((byte) => byte.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
+
+      // KORREKTUR: Bytes 6 und 7 als LITTLE-ENDIAN Uint16 interpretieren
+      var byteData = ByteData.sublistView(Uint8List.fromList(rawData.sublist(6, 8)));
+      int volumeFactor = byteData.getUint16(0, Endian.little); // <-- ZURÜCK ZU LITTLE
+
+      print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+      print("DEBUG_ML (bluetooth_service): ERSTES DATENPAKET (START-ARRAY) EMPFANGEN.");
+      print("  -> Inhalt als HEX: $hexString");
+      print("  -> Inhalt als DEZIMAL: $rawData");
+      print("  -> Die letzten beiden Bytes [${rawData[6]}, ${rawData[7]}] werden als Little-Endian Uint16 interpretiert.");
+      print("  -> Extrahierter 'volumeCalibrationFactor': $volumeFactor");
+      print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+
       state = state.copyWith(
         startConfigBytes: [rawData[6], rawData[7]],
+        volumeCalibrationFactor: volumeFactor,
         receivedData: [TrichterData(timeValues: [], timestamp: DateTime.now())],
         isSessionFinished: false,
       );
       return;
     }
+
     if (_isEndSequence(rawData)) {
       final rawBytePool = state.receivedData.isNotEmpty ? state.receivedData.last.timeValues : <int>[];
       List<int> ticks = _parseTo32Bit(rawBytePool);
-      List<int> msValues = ticks.map((t) => ((t * (state.calibrationFactor ?? 1.0)) / 1000).round()).toList();
-      int finalDuration = msValues.isNotEmpty ? msValues.last : 0;
-      state = state.copyWith(
-        isSessionFinished: true,
-        lastDurationMS: finalDuration,
-        isSessionActive: true,
-      );
+
+      if(ticks.isNotEmpty) {
+        // --- DEBUG-PRINT FÜR ZEIT-ARRAY WIEDER HINZUGEFÜGT ---
+        print("--------------------------------------------------------------");
+        print("DEBUG_ML (bluetooth_service): Umrechnung der Zeit-Werte...");
+
+        // NEU: Debug-Ausgabe für die rohen Tick-Werte
+        List<int> rawTicksFirst = ticks.take(20).toList();
+        List<int> rawTicksLast = ticks.skip(ticks.length > 20 ? ticks.length - 20 : 0).toList();
+        print("  -> Erste 20 rohe Tick-Werte (DEZ): $rawTicksFirst");
+        print("  -> Letzte 20 rohe Tick-Werte (DEZ): $rawTicksLast");
+
+        List<int> msValues = ticks.map((t) => ((t * (state.calibrationFactor ?? 1.0)) / 1000).round()).toList();
+        int finalDuration = msValues.isNotEmpty ? msValues.last : 0;
+
+        // Millisekunden in DEZIMAL ausgeben
+        List<int> msValuesFirst = msValues.take(10).toList();
+        List<int> msValuesLast = msValues.skip(msValues.length > 10 ? msValues.length - 10 : 0).toList();
+        print("  -> Erste 10 ms-Werte (DEZ): $msValuesFirst");
+        print("  -> Letzte 10 ms-Werte (DEZ): $msValuesLast");
+        print("--------------------------------------------------------------");
+
+        state = state.copyWith(
+          isSessionFinished: true,
+          lastDurationMS: finalDuration,
+          isSessionActive: true,
+        );
+      } else {
+        state = state.copyWith(
+          isSessionFinished: true,
+          lastDurationMS: 0,
+          isSessionActive: true,
+        );
+      }
       return;
     }
+
     List<int> currentPool = state.receivedData.isNotEmpty
         ? List<int>.from(state.receivedData.last.timeValues)
         : [];
     currentPool.addAll(rawData);
+
     state = state.copyWith(receivedData: [
       TrichterData(timeValues: currentPool, timestamp: DateTime.now())
     ]);

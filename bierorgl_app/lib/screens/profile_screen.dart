@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
 import 'package:intl/intl.dart';
 
+import 'session_screen.dart';
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -17,6 +19,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (selectedVolumeLabel == '0,33 L') return 330;
     if (selectedVolumeLabel == '0,5 L') return 500;
     return null;
+  }
+
+  Future<void> _reloadData() async {
+    setState(() {});
+  }
+
+  void _confirmDeleteSession(Map<String, dynamic> session) {
+    final sessionName = session['name'] as String? ?? 'diese Session';
+    final sessionID = session['sessionID'] as String;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Session löschen?'),
+        content: Text('Möchtest du "$sessionName" wirklich löschen?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen')),
+          TextButton(
+            onPressed: () async {
+              await _dbHelper.markSessionAsDeleted(sessionID);
+              if (mounted) Navigator.pop(context);
+              _reloadData();
+            },
+            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -363,6 +393,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 } catch (_) {}
 
                 return _buildHistoryItem(
+                  session: s,
                   date: dateStr,
                   event: s['eventName'] ?? 'Privat',
                   time: '${timeS.toStringAsFixed(2)}s',
@@ -376,7 +407,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHistoryItem({required String date, required String event, required String time, required String volume, required String flow}) {
+  Widget _buildHistoryItem({
+    required Map<String, dynamic> session,
+    required String date,
+    required String event,
+    required String time,
+    required String volume,
+    required String flow,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -388,6 +426,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(width: 16),
             Expanded(child: Text(event, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
             Text(volume, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            PopupMenuButton<String>(
+              onSelected: (val) {
+                if (val == 'edit') {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => SessionScreen(session: session)),
+                  ).then((_) => _reloadData());
+                } else if (val == 'delete') {
+                  _confirmDeleteSession(session);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                const PopupMenuItem(value: 'delete', child: Text('Löschen', style: TextStyle(color: Colors.red))),
+              ],
+              icon: const Icon(Icons.more_vert, size: 20.0),
+              padding: EdgeInsets.zero,
+            ),
           ],
         ),
         const SizedBox(height: 8),
