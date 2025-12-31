@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:jwt_decoder/jwt_decoder.dart'; // Dieser Import ist entscheidend
 import 'package:project_camel/core/constants.dart';
 
 class AuthRepository {
@@ -40,7 +41,7 @@ class AuthRepository {
                 // ursprünglichen Request wiederholen
                 final requestOptions = error.requestOptions;
                 requestOptions.headers['Authorization'] =
-                    'Bearer $newAccessToken';
+                'Bearer $newAccessToken';
                 final clonedResponse = await _dio.fetch(requestOptions);
 
                 return handler.resolve(clonedResponse);
@@ -82,6 +83,36 @@ class AuthRepository {
       await _storage.write(key: 'refresh_token', value: refreshToken);
     } else {
       throw Exception('Login fehlgeschlagen');
+    }
+  }
+
+  /// Liest die User-ID aus dem gespeicherten Access Token.
+  Future<String?> getUserID() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token == null) {
+        print("Kein Access Token gefunden zum Dekodieren.");
+        return null;
+      }
+
+      // Prüfen, ob das Token abgelaufen ist, bevor wir es dekodieren
+      if (JwtDecoder.isExpired(token)) {
+        print("Access Token ist abgelaufen. Refresh sollte greifen.");
+        // Hier könnte man den Refresh manuell anstoßen, aber der Interceptor sollte das eigentlich handhaben.
+        // Fürs Erste geben wir null zurück, da das aktuelle Token unbrauchbar ist.
+        return null;
+      }
+
+      // Dekodiere das Token
+      final Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
+
+      // Extrahiere die user_id (oder wie auch immer das Feld im JWT heißt)
+      final userId = decodedToken['user_id'] as String?;
+      return userId;
+    } catch (e) {
+      // Falls das Token ungültig ist oder was anderes schiefgeht
+      print('Fehler beim Dekodieren des Tokens: $e');
+      return null;
     }
   }
 
