@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-// import 'package:geolocator/geolocator.dart'; // DIESE ZEILE WURDE ENTFERNT
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../services/bluetooth_service.dart';
@@ -49,10 +48,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     _loadInitialData();
     _getCurrentLocation();
 
-    final calculatedVolume = (widget.allValues.length * widget.calibrationFactor);
-    final roundedVolume = (calculatedVolume / 10).round() * 10;
-    if (roundedVolume > 0) {
-      _selectedVolumeML = roundedVolume;
+    if (widget.calibrationFactor > 0) {
+      final calculatedVolume =
+          (widget.allValues.length / widget.calibrationFactor) * 500;
+      final roundedVolume = calculatedVolume.round();
+      if (roundedVolume > 0) {
+        _selectedVolumeML = roundedVolume;
+      }
     }
   }
 
@@ -70,7 +72,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         return;
       }
 
-      // HINWEIS: Jetzt wird der Typ `LocationPermission` direkt verwendet.
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -171,11 +172,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     _executeFinalSave();
   }
 
+  // --- START DER ÄNDERUNG ---
+  // Die Methode ruft jetzt _dbHelper.saveSessionForSync auf
   Future<void> _executeFinalSave() async {
     setState(() => _isSaving = true);
     try {
       final sessionData = {
-        'sessionID': const Uuid().v4(),
+        'sessionID': const Uuid().v4(), // Wird hier generiert
         'startedAt': DateTime.now().toIso8601String(),
         'userID': _selectedUserID,
         'volumeML': _selectedVolumeML,
@@ -187,11 +190,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         'longitude': _currentPosition?.longitude ?? 0.0,
         'valuesJSON': jsonEncode(widget.allValues),
         'calibrationFactor': widget.calibrationFactor,
-        'localDeletedAt': null,
-        'syncStatus': SyncStatus.pendingCreate.value,
+        // 'localDeletedAt' wird in saveSessionForSync gehandhabt
+        // 'syncStatus' wird in saveSessionForSync gehandhabt
       };
 
-      await _dbHelper.insertSession(sessionData);
+      // ANPASSUNG: Rufe die neue Methode auf anstatt insertSession
+      await _dbHelper.saveSessionForSync(sessionData);
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -207,6 +212,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       }
     }
   }
+  // --- ENDE DER ÄNDERUNG ---
 
   @override
   Widget build(BuildContext context) {

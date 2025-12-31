@@ -75,12 +75,10 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       final bool wasJustFinished =
       (previous?.isSessionFinished == false && next.isSessionFinished == true);
 
-      // --- START DER ÄNDERUNG ---
       if (wasJustFinished && next.lastDurationMS > 0) {
         final rawBytes = next.receivedData.last.timeValues;
         final processed =
         _processBytesTo32Bit(rawBytes, next.calibrationFactor ?? 1.0);
-        // NEU: calibrationFactor wird explizit geholt
         final calibrationFactor = next.calibrationFactor ?? 1.0;
 
         if (mounted) {
@@ -90,20 +88,16 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
               builder: (context) => SessionScreen(
                 durationMS: next.lastDurationMS,
                 allValues: processed,
-                // NEU: Übergabe des calibrationFactor
                 calibrationFactor: calibrationFactor,
               ),
             ),
           ).then((_) {
-            // Dieser Code wird ausgeführt, wenn vom SessionScreen zurücknavigiert wird.
-            // Er setzt den Bluetooth-Status zurück, um eine neue Messung zu ermöglichen.
             if (mounted) {
               ref.read(bluetoothServiceProvider.notifier).resetData();
             }
           });
         }
       }
-      // --- ENDE DER ÄNDERUNG ---
     });
 
     return Scaffold(
@@ -139,8 +133,6 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                 ],
               ),
             ),
-
-            // Bluetooth Card
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: InkWell(
@@ -174,10 +166,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 40),
-
-            // Zentraler Kreis
             Expanded(
               child: Center(
                 child: Container(
@@ -225,7 +214,6 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                 ),
               ),
             ),
-
             Padding(
               padding: const EdgeInsets.all(30),
               child: Text(
