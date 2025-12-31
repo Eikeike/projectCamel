@@ -80,7 +80,15 @@ class _EventScreenState extends State<EventScreen> {
         itemBuilder: (context, index) {
           final event = events[index];
           return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+            color:  Colors.white,
+            elevation: 0,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide.none
+            ),
+
             child: ListTile(
               leading: const Icon(Icons.celebration, color: Color(0xFFFF9500)),
               title: Text(event['name'] ?? 'Unbekannt'),

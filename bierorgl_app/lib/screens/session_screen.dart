@@ -58,7 +58,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       String formattedDate =
       DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
       _nameController =
-          TextEditingController(text: "Session von: $formattedDate");
+          TextEditingController(text: "Trichterung vom $formattedDate");
 
       // ### NEUE LOGIK zur Vorauswahl basierend auf der Messung ###
       final measuredVolume = widget.calculatedVolumeML;
@@ -255,7 +255,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F0),
       appBar: AppBar(
-        title: Text(_isEditing ? 'Session bearbeiten' : 'Ergebnis speichern',
+        title: Text(_isEditing ? 'Trichterung Bearbeiten' : 'Ergebnis speichern',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFFF9500),
         foregroundColor: Colors.white,
@@ -314,7 +314,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            const Text('NAME DER SESSION',
+            const Text('NAME DER TRICHTERUNG',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             TextField(

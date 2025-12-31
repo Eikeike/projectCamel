@@ -107,13 +107,6 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F0),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await _syncService.sync();
-        },
-        backgroundColor: const Color(0xFFFF9500),
-        child: const Icon(Icons.bug_report, color: Colors.white),
-      ),
       body: SafeArea(
         child: Column(
           children: [
