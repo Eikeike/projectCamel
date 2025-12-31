@@ -13,6 +13,7 @@ dependencies:
   cupertino_icons: ^1.0.6
   google_fonts: ^6.1.0
 
+
   # State Management
   provider: ^6.1.1
 
@@ -60,8 +61,16 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  image_path_android: assets/logo.png
+  adaptive_icon_background: assets/logo_background.png
+  adaptive_icon_foreground: assets/logo_foreground.png
+  adaptive_icon_monochrome: assets/logo_monochrome.png
