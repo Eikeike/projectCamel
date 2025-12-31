@@ -514,6 +514,7 @@ class DatabaseHelper {
   Future<int> saveSessionForSync(Map<String, dynamic> session, {bool isEditing = false}) async {
     final db = await database;
     String sessionID = session['sessionID'] as String? ?? const Uuid().v4();
+    print("DEBUG_ML (database_helper): saveSessionForSync aufgerufen für sessionID $sessionID. isEditing: $isEditing");
 
     final row = <String, dynamic>{
       'sessionID': sessionID,
@@ -534,6 +535,8 @@ class DatabaseHelper {
     if (!isEditing) {
       // Immer PENDING_CREATE, wenn es eine neue Session vom Trichter ist
       row['syncStatus'] = SyncStatus.pendingCreate.value;
+      print("DEBUG_ML (database_helper): Neue Session wird erstellt. Status: ${row['syncStatus']}.");
+      print("DEBUG_ML (database_helper): Schreibe in DB: $row");
       return await db.insert('Session', row, conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
       // Wenn wir im Bearbeitungsmodus sind, prüfen wir den bestehenden Status
@@ -547,11 +550,14 @@ class DatabaseHelper {
       if (existingRows.isEmpty) {
         // Sollte nicht passieren im Bearbeitungsmodus, aber als Fallback
         row['syncStatus'] = SyncStatus.pendingCreate.value;
+        print("DEBUG_ML (database_helper): Bearbeitungsmodus, aber Session nicht gefunden. Erstelle sie neu. Status: ${row['syncStatus']}.");
+        print("DEBUG_ML (database_helper): Schreibe in DB: $row");
         return await db.insert('Session', row);
       }
 
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
+      print("DEBUG_ML (database_helper): Bestehende Session gefunden. Aktueller syncStatus: $currentStatus");
 
       // Wenn sie noch nie gesynct wurde, bleibt sie PENDING_CREATE
       if (currentStatus == SyncStatus.pendingCreate.value) {
@@ -561,6 +567,8 @@ class DatabaseHelper {
         row['syncStatus'] = SyncStatus.pendingUpdate.value;
       }
 
+      print("DEBUG_ML (database_helper): Session wird aktualisiert. Neuer Status: ${row['syncStatus']}.");
+      print("DEBUG_ML (database_helper): Schreibe in DB: $row");
       return await db.update(
         'Session',
         row,

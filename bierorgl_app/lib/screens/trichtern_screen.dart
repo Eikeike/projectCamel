@@ -17,10 +17,6 @@ class TrichternScreen extends ConsumerStatefulWidget {
 
 class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   late final SyncService _syncService;
-  final Stopwatch _stopwatch = Stopwatch();
-  Timer? _timer;
-  double _displayTime = 0.0;
-  bool _isMeasuring = false;
   Timer? _connectionCheckTimer;
 
   @override
@@ -29,14 +25,11 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     final authRepo = AuthRepository();
     _syncService = SyncService(authRepository: authRepo);
 
-    // Starte einen Timer, der alle 3 Sekunden den Verbindungsstatus prüft.
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       final device = ref.read(bluetoothServiceProvider).connectedDevice;
       if (device != null) {
-        // Prüfe den aktuellen Status des Geräts
         device.connectionState.first.then((currentState) {
           if (currentState == BluetoothConnectionState.disconnected && mounted) {
-            // Wenn das Gerät getrennt ist, setze den State in der App zurück.
             ref.read(bluetoothServiceProvider.notifier).forceResetState();
           }
         });
@@ -46,7 +39,6 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
 
   @override
   void dispose() {
-    // Timer stoppen, wenn der Screen verlassen wird.
     _connectionCheckTimer?.cancel();
     super.dispose();
   }
@@ -55,10 +47,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     if (bytes.length < 4) return [];
     List<int> result = [];
     for (int i = 0; i <= bytes.length - 4; i += 4) {
-      int ticks = bytes[i] |
-      (bytes[i + 1] << 8) |
-      (bytes[i + 2] << 16) |
-      (bytes[i + 3] << 24);
+      int ticks = bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24);
       int ms = ((ticks * factor) ~/ 1000);
       result.add(ms);
     }
@@ -70,25 +59,33 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     final bluetoothState = ref.watch(bluetoothServiceProvider);
     final isConnected = bluetoothState.connectedDevice != null;
 
-    // Lauscht auf Statusänderungen für die Navigation
     ref.listen(bluetoothServiceProvider, (previous, next) {
       final bool wasJustFinished =
       (previous?.isSessionFinished == false && next.isSessionFinished == true);
 
       if (wasJustFinished && next.lastDurationMS > 0) {
         final rawBytes = next.receivedData.last.timeValues;
-        final processed =
-        _processBytesTo32Bit(rawBytes, next.calibrationFactor ?? 1.0);
-        final calibrationFactor = next.calibrationFactor ?? 1.0;
+        final timeCalibrationFactor = next.calibrationFactor ?? 1.0;
+        final processed = _processBytesTo32Bit(rawBytes, timeCalibrationFactor);
+
+        // Den neuen Volume-Faktor aus dem State holen
+        final volumeCalibrationFactor = next.volumeCalibrationFactor;
 
         if (mounted) {
+          print("DEBUG_ML (trichtern_screen): Navigiere zu SessionScreen mit:");
+          print("  -> durationMS: ${next.lastDurationMS}");
+          print("  -> allValues (Anzahl): ${processed.length}");
+          print("  -> timeCalibrationFactor: $timeCalibrationFactor");
+          print("  -> volumeCalibrationFactor: $volumeCalibrationFactor"); // Neuer Log
+
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => SessionScreen(
                 durationMS: next.lastDurationMS,
                 allValues: processed,
-                calibrationFactor: calibrationFactor,
+                // Wichtig: Wir übergeben hier jetzt den richtigen Faktor!
+                calibrationFactor: volumeCalibrationFactor?.toDouble(),
               ),
             ),
           ).then((_) {
@@ -112,23 +109,21 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
+            const Padding(
+              padding: EdgeInsets.all(20),
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'BIERORGL',
                     style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFFFF9500)),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
-                    isConnected
-                        ? 'Bereit zum Ballern!'
-                        : 'Trichter nicht verbunden',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    'Bereit zum Ballern!',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                 ],
               ),
