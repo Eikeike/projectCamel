@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher.dart'; // Import für den URL Launcher
+import 'package:url_launcher/url_launcher.dart';
 import '../cubits/auth_cubit.dart';
 import '../widgets/login_form.dart';
+import '../services/database_helper.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
-  // Funktion zum Öffnen der Registrierungs-URL
   Future<void> _launchURL(BuildContext context) async {
     final Uri url = Uri.parse('https://dev.trichter.biertrinkenistgesund.de/register/');
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      // Wenn das Öffnen fehlschlägt, zeige eine Fehlermeldung
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Konnte die URL nicht öffnen: $url')),
@@ -23,11 +22,26 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF4E6), // Pastellorange Hintergrund
+      backgroundColor: const Color(0xFFFFF4E6),
       body: BlocListener<AuthCubit, AuthState>(
-        listener: (context, state) {
+        listener: (context, state) async {
           if (state is AuthAuthenticated) {
-            Navigator.pushReplacementNamed(context, '/home');
+            // --- HIER IST DIE LOGIK ---
+            // DatabaseHelper Instanz holen und die UserID in die DB schreiben
+            try {
+              final dbHelper = DatabaseHelper();
+              await dbHelper.updateLoggedInUser(state.userId);
+              print("DATABASE DEBUG: LoggedInUserID auf ${state.userId} gesetzt.");
+            } catch (e) {
+              print("DATABASE ERROR: Fehler beim Setzen der LoggedInUserID: $e");
+              // Optional: Dem User eine Fehlermeldung zeigen
+            }
+            // --------------------------
+
+            if (context.mounted) {
+              Navigator.pushReplacementNamed(context, '/home');
+            }
+
           } else if (state is AuthError) {
             ScaffoldMessenger.of(context)
                 .showSnackBar(SnackBar(content: Text(state.message)));
@@ -39,7 +53,6 @@ class LoginScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo Container mit Schatten
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -67,7 +80,6 @@ class LoginScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 32),
-                // Titel
                 const Text(
                   'Bierorgl',
                   style: TextStyle(
@@ -87,7 +99,6 @@ class LoginScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 40),
-                // Login Form Container
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -103,42 +114,21 @@ class LoginScreen extends StatelessWidget {
                   ),
                   child: const LoginForm(),
                 ),
-                const SizedBox(height: 24), // Etwas mehr Abstand
-
-                // Wrapper für die beiden Buttons
-                Column(
-                  children: [
-                    TextButton(
-                      onPressed: () => _launchURL(context), // Ruft die URL-Funktion auf
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.grey[600],
-                      ),
-                      child: const Text(
-                        'Noch keinen Account? Jetzt registrieren',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                const SizedBox(height: 24),
+                // Der 'Jetzt registrieren'-Button bleibt erhalten.
+                TextButton(
+                  onPressed: () => _launchURL(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey[600],
+                  ),
+                  child: const Text(
+                    'Noch keinen Account? Jetzt registrieren',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(height: 4),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushReplacementNamed(context, '/home');
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF8C42).withOpacity(0.8),
-                      ),
-                      child: const Text(
-                        'Admin Skip (Direkt zu Home)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
+                  ),
+                ),
               ],
             ),
           ),

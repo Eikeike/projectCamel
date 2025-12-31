@@ -40,6 +40,10 @@ dependencies:
 
   intl: ^0.20.2
 
+  equatable: ^2.0.5
+
+  jwt_decoder: ^2.0.1
+
   #flutter_jwt_auth: ^1.0.0
 
   flutter_secure_storage: ^10.0.0
