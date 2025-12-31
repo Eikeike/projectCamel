@@ -6,13 +6,13 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../services/bluetooth_service.dart';
 import '../services/database_helper.dart';
-import 'package:project_camel/core/constants.dart'; // Pfad ggf. anpassen
+import 'package:project_camel/core/constants.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? session;
   final int? durationMS;
   final List<int>? allValues;
-  final double? calibrationFactor;
+  final double? calibrationFactor; // Das ist jetzt der volumeCalibrationFactor
 
   const SessionScreen({
     super.key,
@@ -43,6 +43,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   @override
   void initState() {
     super.initState();
+    print("DEBUG_ML (session_screen): initState gestartet. isEditing: $_isEditing");
 
     if (_isEditing) {
       final s = widget.session!;
@@ -50,19 +51,37 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       _selectedUserID = s['userID'];
       _selectedEventID = s['eventID'];
       _selectedVolumeML = s['volumeML'] ?? 500;
+      // Der Kalibrierungsfaktor für die Bearbeitung wird aus der DB geladen
     } else {
       String formattedDate =
       DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
       _nameController =
           TextEditingController(text: "Session von: $formattedDate");
 
+      print("DEBUG_ML (session_screen): Berechne initiales Volumen...");
+      print("  -> volumeCalibrationFactor aus Start-Array: ${widget.calibrationFactor}");
+      print("  -> allValues.length: ${widget.allValues?.length}");
+
       if (widget.calibrationFactor != null && widget.calibrationFactor! > 0) {
-        final calculatedVolume =
-            ((widget.allValues?.length ?? 0) / widget.calibrationFactor!) * 500;
+        // --- FINALE FORMEL HIER ANGEWENDET ---
+        final volumeCalibrationFactor = widget.calibrationFactor!;
+        final calculatedVolume = (widget.allValues?.length ?? 0) / (2 * volumeCalibrationFactor) * 1000;
         final roundedVolume = calculatedVolume.round();
+
+        print("  -> FINALE Formel: (allValues.length / (2 * volumeCalibrationFactor)) * 1000");
+        print("  -> Rechnung: (${widget.allValues?.length} / (2 * $volumeCalibrationFactor)) * 1000 = $calculatedVolume");
+        print("  -> Gerundetes Ergebnis: $roundedVolume ml");
+
         if (roundedVolume > 0) {
           _selectedVolumeML = roundedVolume;
+          print("DEBUG_ML (session_screen): Initiales Volumen gesetzt auf: $_selectedVolumeML ml.");
+        } else {
+          print("DEBUG_ML (session_screen): Berechnetes Volumen ist <= 0. Fallback auf 500ml.");
+          _selectedVolumeML = 500;
         }
+      } else {
+        print("DEBUG_ML (session_screen): volumeCalibrationFactor ist null oder 0. Fallback auf 500ml.");
+        _selectedVolumeML = 500;
       }
     }
 
@@ -188,6 +207,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   Future<void> _executeFinalSave() async {
     setState(() => _isSaving = true);
+
     try {
       final sessionData = {
         'sessionID': _isEditing ? widget.session!['sessionID'] : const Uuid().v4(),
@@ -201,8 +221,11 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         'latitude': _isEditing ? widget.session!['latitude'] : (_currentPosition?.latitude ?? 0.0),
         'longitude': _isEditing ? widget.session!['longitude'] : (_currentPosition?.longitude ?? 0.0),
         'valuesJSON': _isEditing ? widget.session!['valuesJSON'] : jsonEncode(widget.allValues),
-        'calibrationFactor': _isEditing ? widget.session!['calibrationFactor'] : widget.calibrationFactor,
+        // Hier wird der Volume-Faktor in die DB geschrieben
+        'calibrationFactor': _isEditing ? widget.session!['calibrationFactor'] : widget.calibrationFactor?.toInt(),
       };
+
+      print("DEBUG_ML (session_screen): Speichere Session. Der 'calibrationFactor', der in die DB geht, ist ${sessionData['calibrationFactor']}");
 
       await _dbHelper.saveSessionForSync(sessionData, isEditing: _isEditing);
 
@@ -222,6 +245,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       }
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -380,6 +404,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         if (custom) {
           _showCustomVol();
         } else {
+          print("DEBUG_ML (session_screen): Volumen manuell auf $ml ml geändert.");
           setState(() => _selectedVolumeML = ml);
         }
       },
@@ -408,6 +433,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             onPressed: () {
               final int? customVolume = int.tryParse(c.text);
               if (customVolume != null && customVolume > 0) {
+                print("DEBUG_ML (session_screen): Eigenes Volumen '$customVolume ml' über Dialog gesetzt.");
                 setState(() => _selectedVolumeML = customVolume);
               }
               Navigator.pop(context);
