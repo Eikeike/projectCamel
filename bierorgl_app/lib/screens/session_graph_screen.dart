@@ -4,14 +4,12 @@ import 'package:fl_chart/fl_chart.dart';
 
 class SessionGraphScreen extends StatefulWidget {
   final String valuesJson;
-  final double clkFactor;
-  final int timestampsPerLiter;
+  final int volumeCalibrationValue;
 
   const SessionGraphScreen({
     super.key,
     required this.valuesJson,
-    required this.clkFactor,
-    required this.timestampsPerLiter,
+    required this.volumeCalibrationValue,
   });
 
   @override
@@ -22,131 +20,188 @@ class _SessionGraphScreenState extends State<SessionGraphScreen> {
   List<FlSpot> flowData = [];
   List<FlSpot> volumeData = [];
   bool isLoading = true;
+  double maxTime = 0;
+  double totalVolume = 0;
 
   @override
   void initState() {
     super.initState();
-    // Die Berechnung in einem 'microtask' ausführen, um den UI-Thread nicht zu blockieren.
     Future.microtask(() => _processData());
   }
 
   void _processData() {
     try {
-      // 1. Rohdaten laden und parsen
-      // Ignoriere die abnormalen Werte (große Sprünge) am Anfang/Ende des Arrays
-      final List<int> rawTimestamps = (jsonDecode(widget.valuesJson) as List)
-          .map((item) => item as int)
-          .where((val) => val < 30000000)
-          .toList();
+      final List<dynamic> decoded = jsonDecode(widget.valuesJson);
+      List<int> rawData = decoded.map((item) => item as int).toList();
 
-      if (rawTimestamps.length < 2) {
-        setState(() => isLoading = false);
+      // 1. FILTER: Header entfernen & Sortieren
+      List<int> filtered = rawData.where((val) => val >= 0 && val < 50000).toList();
+      filtered.sort();
+
+      if (filtered.length < 2) {
+        if (mounted) setState(() => isLoading = false);
         return;
       }
 
-      // 2. Grundberechnungen (wie im MATLAB-Skript)
-      final List<double> timeS = rawTimestamps.map((t) => t * widget.clkFactor).toList();
-      final double volStep = 1.0 / widget.timestampsPerLiter;
+      final double volStep = 0.5 / widget.volumeCalibrationValue;
+      final int t0 = filtered.first;
 
-      List<double> flow = [];
-      for (int i = 1; i < timeS.length; i++) {
-        double timeDiff = timeS[i] - timeS[i - 1];
-        if (timeDiff > 0) {
-          flow.add(volStep / timeDiff);
-        }
-      }
-      final List<double> timeFlow = timeS.sublist(1);
-
-      // 3. Daten für fl_chart vorbereiten
-      List<FlSpot> tempFlowData = [];
-      for (int i = 0; i < flow.length; i++) {
-        // Filtere extreme Ausreißer im Durchfluss für eine bessere Darstellung
-        if (flow[i] < 10) { // Limit auf 10 L/s, kann angepasst werden
-          tempFlowData.add(FlSpot(timeFlow[i], flow[i]));
-        }
-      }
-
+      List<double> rawFlowValues = [];
+      List<double> timeSpots = [];
       List<FlSpot> tempVolumeData = [];
-      for (int i = 0; i < timeS.length; i++) {
-        tempVolumeData.add(FlSpot(timeS[i], i * volStep));
+
+      tempVolumeData.add(const FlSpot(0, 0));
+
+      // 2. ROHWERTE BERECHNEN
+      for (int i = 1; i < filtered.length; i++) {
+        double currentTimeS = (filtered[i] - t0) / 1000.0;
+        double prevTimeS = (filtered[i - 1] - t0) / 1000.0;
+        double deltaT = currentTimeS - prevTimeS;
+
+        if (deltaT > 0) {
+          double flow = volStep / deltaT;
+          rawFlowValues.add(flow > 4.0 ? 0.0 : flow); // Plausibilitäts-Cutoff
+          timeSpots.add(currentTimeS);
+
+          double currentVol = i * volStep;
+          tempVolumeData.add(FlSpot(currentTimeS, currentVol));
+
+          maxTime = currentTimeS;
+          totalVolume = currentVol;
+        }
       }
 
-      setState(() {
-        flowData = tempFlowData;
-        volumeData = tempVolumeData;
-        isLoading = false;
-      });
+      // 3. GLÄTTUNGS-FILTER (Moving Average - MATLAB: movmean)
+      List<FlSpot> smoothedFlowData = [];
+      int windowSize = 10; // Fenstergröße anpassen für mehr/weniger Glättung
 
+      for (int i = 0; i < rawFlowValues.length; i++) {
+        double sum = 0;
+        int count = 0;
+
+        // Berechne Durchschnitt im Fenster um den aktuellen Punkt
+        for (int j = i - (windowSize ~/ 2); j <= i + (windowSize ~/ 2); j++) {
+          if (j >= 0 && j < rawFlowValues.length) {
+            sum += rawFlowValues[j];
+            count++;
+          }
+        }
+
+        smoothedFlowData.add(FlSpot(timeSpots[i], sum / count));
+      }
+
+      if (mounted) {
+        setState(() {
+          flowData = smoothedFlowData;
+          volumeData = tempVolumeData;
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      print("Fehler bei der Graphen-Datenverarbeitung: $e");
-      setState(() => isLoading = false);
+      debugPrint("Fehler: $e");
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black.withOpacity(0.5),
-      child: Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            height: 500,
-            width: double.infinity,
-            color: const Color(0xFF2c2c2e), // Dunkler Hintergrund für den Graphen
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : flowData.isEmpty
-                ? const Center(child: Text("Nicht genügend Daten für den Graphen vorhanden.", style: TextStyle(color: Colors.white)))
-                : Column(
-              children: [
-                const Text(
-                  "Analyse des Trinkverhaltens",
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: LineChart(
-                    LineChartData(
-                      gridData: FlGridData(show: true, drawVerticalLine: true, getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white12, strokeWidth: 1,), getDrawingVerticalLine: (value) => const FlLine(color: Colors.white12, strokeWidth: 1,),),
-                      titlesData: FlTitlesData(
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40, interval: 0.5,)),
-                        bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 30, interval: 1,)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      ),
-                      borderData: FlBorderData(show: true, border: Border.all(color: Colors.white24)),
-                      lineBarsData: [
-                        // Durchfluss-Graph
-                        LineChartBarData(
-                          spots: flowData,
-                          isCurved: true,
-                          color: const Color(0xFFFF9500),
-                          barWidth: 3,
-                          isStrokeCapRound: true,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: const Color(0xFFFF9500).withOpacity(0.3),
-                          ),
+    double xInterval = (maxTime / 5).clamp(0.1, 5.0);
+
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.95,
+          height: 450,
+          padding: const EdgeInsets.fromLTRB(10, 25, 20, 15),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 15)],
+          ),
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.orange))
+              : Column(
+            children: [
+              Text(
+                "Analyse: ${totalVolume.toStringAsFixed(2)} L | ${maxTime.toStringAsFixed(1)} s",
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 25),
+              Expanded(
+                child: LineChart(
+                  LineChartData(
+                    minX: 0, maxX: maxTime, minY: 0,
+                    gridData: const FlGridData(show: true, drawVerticalLine: false),
+                    borderData: FlBorderData(show: false),
+                    titlesData: FlTitlesData(
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: xInterval,
+                          getTitlesWidget: (v, _) => Text("${v.toStringAsFixed(1)}s",
+                              style: const TextStyle(color: Colors.white54, fontSize: 9)),
                         ),
-                      ],
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true, reservedSize: 35,
+                          getTitlesWidget: (v, _) => Text(v.toStringAsFixed(1),
+                              style: const TextStyle(color: Colors.orange, fontSize: 10)),
+                        ),
+                      ),
+                      rightTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true, reservedSize: 35,
+                          getTitlesWidget: (v, _) => Text(v.toStringAsFixed(2),
+                              style: const TextStyle(color: Colors.blue, fontSize: 10)),
+                        ),
+                      ),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     ),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: flowData,
+                        isCurved: true,
+                        curveSmoothness: 0.3, // Macht die Kurve noch flüssiger
+                        color: Colors.orange,
+                        barWidth: 3,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(show: true, color: Colors.orange.withOpacity(0.1)),
+                      ),
+                      LineChartBarData(
+                        spots: volumeData,
+                        color: Colors.blue.withOpacity(0.5),
+                        barWidth: 3,
+                        dotData: const FlDotData(show: false),
+                      ),
+                    ],
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.only(top: 8.0),
-                  child: Text("Durchfluss [L/s]", style: TextStyle(color: Colors.white70, fontSize: 12)),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 15),
+              _buildLegend(),
+            ],
           ),
         ),
       ),
     );
   }
+
+  Widget _buildLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _indicator(Colors.orange, "Trinkgeschwindigkeit [L/s]"),
+        const SizedBox(width: 20),
+        _indicator(Colors.blue, "Volumen [L]"),
+      ],
+    );
+  }
+
+  Widget _indicator(Color c, String t) => Row(children: [
+    Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+    const SizedBox(width: 6),
+    Text(t, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+  ]);
 }
