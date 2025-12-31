@@ -57,8 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // Gib hier die gefilterte Liste weiter
                 valuesJson: graphValuesJson,
                 // Platzhalter, diese Werte müssen aus der DB kommen oder fix sein
-                clkFactor: 8e-6,
-                timestampsPerLiter: volumeCalibrationFactor,
+                volumeCalibrationValue: volumeCalibrationFactor,
               ),
             ),
           );

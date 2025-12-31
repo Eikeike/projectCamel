@@ -12,7 +12,9 @@ class SessionScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? session;
   final int? durationMS;
   final List<int>? allValues;
-  final double? calibrationFactor; // Das ist jetzt der volumeCalibrationFactor
+  final double? calibrationFactor;
+  // ### NEU: Der berechnete Wert vom TrichternScreen ###
+  final int? calculatedVolumeML;
 
   const SessionScreen({
     super.key,
@@ -20,6 +22,7 @@ class SessionScreen extends ConsumerStatefulWidget {
     this.durationMS,
     this.allValues,
     this.calibrationFactor,
+    this.calculatedVolumeML,
   });
 
   @override
@@ -51,37 +54,29 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       _selectedUserID = s['userID'];
       _selectedEventID = s['eventID'];
       _selectedVolumeML = s['volumeML'] ?? 500;
-      // Der Kalibrierungsfaktor für die Bearbeitung wird aus der DB geladen
     } else {
       String formattedDate =
       DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
       _nameController =
           TextEditingController(text: "Trichterung vom $formattedDate");
 
-      print("DEBUG_ML (session_screen): Berechne initiales Volumen...");
-      print("  -> volumeCalibrationFactor aus Start-Array: ${widget.calibrationFactor}");
-      print("  -> allValues.length: ${widget.allValues?.length}");
-
-      if (widget.calibrationFactor != null && widget.calibrationFactor! > 0) {
-        // --- FINALE FORMEL HIER ANGEWENDET ---
-        final volumeCalibrationFactor = widget.calibrationFactor!;
-        final calculatedVolume = (widget.allValues?.length ?? 0) / (2 * volumeCalibrationFactor) * 1000;
-        final roundedVolume = calculatedVolume.round();
-
-        print("  -> FINALE Formel: (allValues.length / (2 * volumeCalibrationFactor)) * 1000");
-        print("  -> Rechnung: (${widget.allValues?.length} / (2 * $volumeCalibrationFactor)) * 1000 = $calculatedVolume");
-        print("  -> Gerundetes Ergebnis: $roundedVolume ml");
-
-        if (roundedVolume > 0) {
-          _selectedVolumeML = roundedVolume;
-          print("DEBUG_ML (session_screen): Initiales Volumen gesetzt auf: $_selectedVolumeML ml.");
+      // ### NEUE LOGIK zur Vorauswahl basierend auf der Messung ###
+      final measuredVolume = widget.calculatedVolumeML;
+      if (measuredVolume != null && measuredVolume > 0) {
+        // Toleranz von 75ml
+        if ((measuredVolume - 330).abs() <= 75) {
+          _selectedVolumeML = 330; // Wähle 0,33L vor
+          print("DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 330ml. Wähle 0,33L vor.");
+        } else if ((measuredVolume - 500).abs() <= 75) {
+          _selectedVolumeML = 500; // Wähle 0,5L vor
+          print("DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 500ml. Wähle 0,5L vor.");
         } else {
-          print("DEBUG_ML (session_screen): Berechnetes Volumen ist <= 0. Fallback auf 500ml.");
-          _selectedVolumeML = 500;
+          _selectedVolumeML = measuredVolume; // Setze den exakten Custom-Wert
+          print("DEBUG_ML (session_screen): Messung ($measuredVolume ml) außerhalb der Toleranz. Wähle Custom-Wert vor.");
         }
       } else {
-        print("DEBUG_ML (session_screen): volumeCalibrationFactor ist null oder 0. Fallback auf 500ml.");
-        _selectedVolumeML = 500;
+        _selectedVolumeML = 500; // Fallback
+        print("DEBUG_ML (session_screen): Kein gültiges Volumen gemessen. Fallback auf 500ml.");
       }
     }
 
@@ -97,6 +92,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
 
   Future<void> _getCurrentLocation() async {
+    // Check if the widget is still mounted before calling setState.
+    if (!mounted) return;
+
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -116,7 +114,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       }
 
       _currentPosition = await Geolocator.getCurrentPosition();
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     } catch (e) {
       print("Fehler beim Abrufen des Standorts: $e");
     }
@@ -125,10 +125,12 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   Future<void> _loadInitialData() async {
     final users = await _dbHelper.getUsers();
     final events = await _dbHelper.getEvents();
-    setState(() {
-      _users = users;
-      _events = events;
-    });
+    if(mounted) {
+      setState(() {
+        _users = users;
+        _events = events;
+      });
+    }
   }
 
   void _addGuestUser() {
@@ -158,8 +160,10 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   'eMail': 'gast@bierorgl.de',
                 });
                 await _loadInitialData();
-                setState(() => _selectedUserID = newId);
-                if (mounted) Navigator.pop(context);
+                if (mounted) {
+                  setState(() => _selectedUserID = newId);
+                  Navigator.pop(context);
+                }
               }
             },
             child: const Text('Hinzufügen'),
@@ -171,11 +175,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   Future<void> _processSave() async {
     if (_selectedUserID == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Fehler: Wer hat getrichtert? (Pflichtfeld)'),
-            backgroundColor: Colors.red),
-      );
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Fehler: Wer hat getrichtert? (Pflichtfeld)'),
+              backgroundColor: Colors.red),
+        );
+      }
       return;
     }
 
@@ -219,7 +225,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         'latitude': _isEditing ? widget.session!['latitude'] : (_currentPosition?.latitude ?? 0.0),
         'longitude': _isEditing ? widget.session!['longitude'] : (_currentPosition?.longitude ?? 0.0),
         'valuesJSON': _isEditing ? widget.session!['valuesJSON'] : jsonEncode(widget.allValues),
-        // Hier wird der Volume-Faktor in die DB geschrieben
         'calibrationFactor': _isEditing ? widget.session!['calibrationFactor'] : widget.calibrationFactor?.toInt(),
       };
 
@@ -236,8 +241,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         );
       }
     } catch (e) {
-      setState(() => _isSaving = false);
-      if (mounted) {
+      if(mounted) {
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Fehler beim Speichern: $e')));
       }
@@ -342,6 +347,19 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             const Text('VOLUMEN',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
+
+            // ### NEU: Anzeige des gemessenen Volumens ###
+            if (!_isEditing && widget.calculatedVolumeML != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Center(
+                  child: Text(
+                    'Messung: ${widget.calculatedVolumeML} ml',
+                    style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [

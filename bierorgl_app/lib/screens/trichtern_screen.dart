@@ -67,16 +67,23 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
         final rawBytes = next.receivedData.last.timeValues;
         final timeCalibrationFactor = next.calibrationFactor ?? 1.0;
         final processed = _processBytesTo32Bit(rawBytes, timeCalibrationFactor);
-
-        // Den neuen Volume-Faktor aus dem State holen
         final volumeCalibrationFactor = next.volumeCalibrationFactor;
+
+        // ### NEU: Berechne das Volumen direkt hier ###
+        int? calculatedVolumeML;
+        if (volumeCalibrationFactor != null && volumeCalibrationFactor > 0) {
+          final double calculatedVolume = (processed.length / (2 * volumeCalibrationFactor)) * 1000;
+          calculatedVolumeML = calculatedVolume.round();
+        }
 
         if (mounted) {
           print("DEBUG_ML (trichtern_screen): Navigiere zu SessionScreen mit:");
           print("  -> durationMS: ${next.lastDurationMS}");
           print("  -> allValues (Anzahl): ${processed.length}");
           print("  -> timeCalibrationFactor: $timeCalibrationFactor");
-          print("  -> KORREKT übergebener volumeCalibrationFactor: $volumeCalibrationFactor"); // Log zur Überprüfung
+          print("  -> KORREKT übergebener volumeCalibrationFactor: $volumeCalibrationFactor");
+          print("  -> Berechnetes Volumen: $calculatedVolumeML ml");
+
 
           Navigator.push(
             context,
@@ -84,9 +91,9 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
               builder: (context) => SessionScreen(
                 durationMS: next.lastDurationMS,
                 allValues: processed,
-                // *** KORREKTUR HIER ***
-                // Wir übergeben den `volumeCalibrationFactor` an den SessionScreen.
                 calibrationFactor: volumeCalibrationFactor?.toDouble(),
+                // ### NEU: Gib das berechnete Volumen weiter ###
+                calculatedVolumeML: calculatedVolumeML,
               ),
             ),
           ).then((_) {
