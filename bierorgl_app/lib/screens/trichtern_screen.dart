@@ -76,7 +76,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
           print("  -> durationMS: ${next.lastDurationMS}");
           print("  -> allValues (Anzahl): ${processed.length}");
           print("  -> timeCalibrationFactor: $timeCalibrationFactor");
-          print("  -> volumeCalibrationFactor: $volumeCalibrationFactor"); // Neuer Log
+          print("  -> KORREKT übergebener volumeCalibrationFactor: $volumeCalibrationFactor"); // Log zur Überprüfung
 
           Navigator.push(
             context,
@@ -84,7 +84,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
               builder: (context) => SessionScreen(
                 durationMS: next.lastDurationMS,
                 allValues: processed,
-                // Wichtig: Wir übergeben hier jetzt den richtigen Faktor!
+                // *** KORREKTUR HIER ***
+                // Wir übergeben den `volumeCalibrationFactor` an den SessionScreen.
                 calibrationFactor: volumeCalibrationFactor?.toDouble(),
               ),
             ),

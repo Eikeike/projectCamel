@@ -92,11 +92,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    if (!_isEditing) {
-      ref.read(bluetoothServiceProvider.notifier).resetData();
-    }
     super.dispose();
   }
+
 
   Future<void> _getCurrentLocation() async {
     try {
