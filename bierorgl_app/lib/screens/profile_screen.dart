@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../services/database_helper.dart';
 import 'package:intl/intl.dart';
 
+import 'session_graph_screen.dart'; // NEU: Import für den Graphen-Screen
 import 'session_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -24,6 +26,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _reloadData() async {
     setState(() {});
   }
+
+  void _showGraph(Map<String, dynamic> session) {
+    final String? valuesJson = session['valuesJSON'] as String?;
+    final int? timeCalibrationFactor = session['timeCalibrationFactor'];
+
+    // KORREKTUR: Robusten Wert aus der Datenbank lesen
+    final num? rawVolumeFactor = session['calibrationFactor'] as num?;
+    final int? volumeCalibrationFactor = rawVolumeFactor?.toInt();
+
+    // Tipp für den Graphen: ignoriere den ersten (oft falschen) Wert
+    final List<dynamic> allValues = valuesJson != null ? jsonDecode(valuesJson) : [];
+    final List<dynamic> graphValues = allValues.length > 1 ? allValues.sublist(1) : [];
+    final String graphValuesJson = jsonEncode(graphValues);
+
+
+    if (valuesJson != null && volumeCalibrationFactor != null) {
+      showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Graph',
+        transitionDuration: const Duration(milliseconds: 400),
+        pageBuilder: (context, anim1, anim2) => Container(), // Platzhalter
+        transitionBuilder: (context, anim1, anim2, child) {
+          return ScaleTransition(
+            scale: anim1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 20),
+              child: SessionGraphScreen(
+                // Gib hier die gefilterte Liste weiter
+                valuesJson: graphValuesJson,
+                // Platzhalter, diese Werte müssen aus der DB kommen oder fix sein
+                clkFactor: 8e-6,
+                timestampsPerLiter: volumeCalibrationFactor,
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Keine Graphendaten für diese Session verfügbar.'),
+            backgroundColor: Colors.amber),
+      );
+    }
+  }
+
+
 
   void _confirmDeleteSession(Map<String, dynamic> session) {
     final sessionName = session['name'] as String? ?? 'diese Session';
@@ -57,27 +107,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: FutureBuilder<Map<String, dynamic>>(
           future: _loadAllProfileData(),
           builder: (context, snapshot) {
-            // 1. Ladezustand
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
                 child: CircularProgressIndicator(color: Color(0xFFFF9500)),
               );
             }
 
-            // 2. Fehler oder kein User eingeloggt
             if (!snapshot.hasData || snapshot.data!['user'] == null) {
               return _buildNoUserUI();
             }
 
             final data = snapshot.data!;
             final user = data['user'] as Map<String, dynamic>;
-
-            // Sicherer Cast der Listen (verhindert den 'Null' subtype Fehler)
             final allSessions = List<Map<String, dynamic>>.from(data['sessions'] ?? []);
             final history = List<Map<String, dynamic>>.from(data['history'] ?? []);
             final mostFrequentEvent = data['mostEvent'] as Map<String, dynamic>?;
 
-            // Filterung für die Stat-Cards
             List<Map<String, dynamic>> filteredSessions = allSessions;
             if (selectedVolumeML != null) {
               filteredSessions = allSessions
@@ -85,7 +130,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   .toList();
             }
 
-            // Berechnungen für Stats Grid
             int totalCount = filteredSessions.length;
             double totalVolumeL = allSessions.fold(0.0, (sum, s) => sum + ((s['volumeML'] as int? ?? 0) / 1000.0));
 
@@ -106,7 +150,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               avgTime = "${(avgMS / 1000).toStringAsFixed(2)}s";
             }
 
-            // Beste Zeiten (fixe Werte für die Liste)
             String best033 = _getBestForVol(allSessions, 330);
             String best05 = _getBestForVol(allSessions, 500);
 
@@ -435,10 +478,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ).then((_) => _reloadData());
                 } else if (val == 'delete') {
                   _confirmDeleteSession(session);
+                } else if (val == 'show_graph') { // NEU: Aufruf der Graphen-Methode
+                  _showGraph(session);
                 }
               },
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
+                const PopupMenuItem(value: 'show_graph', child: Text('Graph anzeigen')), // NEU
                 const PopupMenuItem(value: 'delete', child: Text('Löschen', style: TextStyle(color: Colors.red))),
               ],
               icon: const Icon(Icons.more_vert, size: 20.0),
