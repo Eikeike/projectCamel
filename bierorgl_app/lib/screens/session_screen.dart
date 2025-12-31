@@ -9,15 +9,17 @@ import '../services/database_helper.dart';
 import 'package:project_camel/core/constants.dart'; // Pfad ggf. anpassen
 
 class SessionScreen extends ConsumerStatefulWidget {
-  final int durationMS;
-  final List<int> allValues;
-  final double calibrationFactor;
+  final Map<String, dynamic>? session;
+  final int? durationMS;
+  final List<int>? allValues;
+  final double? calibrationFactor;
 
   const SessionScreen({
     super.key,
-    required this.durationMS,
-    required this.allValues,
-    required this.calibrationFactor,
+    this.session,
+    this.durationMS,
+    this.allValues,
+    this.calibrationFactor,
   });
 
   @override
@@ -36,32 +38,44 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   int _selectedVolumeML = 500;
   bool _isSaving = false;
   Position? _currentPosition;
+  bool get _isEditing => widget.session != null;
 
   @override
   void initState() {
     super.initState();
-    String formattedDate =
-    DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
-    _nameController =
-        TextEditingController(text: "Session von: $formattedDate");
+
+    if (_isEditing) {
+      final s = widget.session!;
+      _nameController = TextEditingController(text: s['name'] ?? '');
+      _selectedUserID = s['userID'];
+      _selectedEventID = s['eventID'];
+      _selectedVolumeML = s['volumeML'] ?? 500;
+    } else {
+      String formattedDate =
+      DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
+      _nameController =
+          TextEditingController(text: "Session von: $formattedDate");
+
+      if (widget.calibrationFactor != null && widget.calibrationFactor! > 0) {
+        final calculatedVolume =
+            ((widget.allValues?.length ?? 0) / widget.calibrationFactor!) * 500;
+        final roundedVolume = calculatedVolume.round();
+        if (roundedVolume > 0) {
+          _selectedVolumeML = roundedVolume;
+        }
+      }
+    }
 
     _loadInitialData();
     _getCurrentLocation();
-
-    if (widget.calibrationFactor > 0) {
-      final calculatedVolume =
-          (widget.allValues.length / widget.calibrationFactor) * 500;
-      final roundedVolume = calculatedVolume.round();
-      if (roundedVolume > 0) {
-        _selectedVolumeML = roundedVolume;
-      }
-    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    ref.read(bluetoothServiceProvider.notifier).resetData();
+    if (!_isEditing) {
+      ref.read(bluetoothServiceProvider.notifier).resetData();
+    }
     super.dispose();
   }
 
@@ -172,36 +186,32 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     _executeFinalSave();
   }
 
-  // --- START DER ÄNDERUNG ---
-  // Die Methode ruft jetzt _dbHelper.saveSessionForSync auf
   Future<void> _executeFinalSave() async {
     setState(() => _isSaving = true);
     try {
       final sessionData = {
-        'sessionID': const Uuid().v4(), // Wird hier generiert
-        'startedAt': DateTime.now().toIso8601String(),
+        'sessionID': _isEditing ? widget.session!['sessionID'] : const Uuid().v4(),
+        'startedAt': _isEditing ? widget.session!['startedAt'] : DateTime.now().toIso8601String(),
         'userID': _selectedUserID,
         'volumeML': _selectedVolumeML,
-        'durationMS': widget.durationMS,
+        'durationMS': _isEditing ? widget.session!['durationMS'] : widget.durationMS,
         'eventID': _selectedEventID,
         'name': _nameController.text.isNotEmpty ? _nameController.text : null,
-        'description': null,
-        'latitude': _currentPosition?.latitude ?? 0.0,
-        'longitude': _currentPosition?.longitude ?? 0.0,
-        'valuesJSON': jsonEncode(widget.allValues),
-        'calibrationFactor': widget.calibrationFactor,
-        // 'localDeletedAt' wird in saveSessionForSync gehandhabt
-        // 'syncStatus' wird in saveSessionForSync gehandhabt
+        'description': _isEditing ? widget.session!['description'] : null,
+        'latitude': _isEditing ? widget.session!['latitude'] : (_currentPosition?.latitude ?? 0.0),
+        'longitude': _isEditing ? widget.session!['longitude'] : (_currentPosition?.longitude ?? 0.0),
+        'valuesJSON': _isEditing ? widget.session!['valuesJSON'] : jsonEncode(widget.allValues),
+        'calibrationFactor': _isEditing ? widget.session!['calibrationFactor'] : widget.calibrationFactor,
       };
 
-      // ANPASSUNG: Rufe die neue Methode auf anstatt insertSession
-      await _dbHelper.saveSessionForSync(sessionData);
+      await _dbHelper.saveSessionForSync(sessionData, isEditing: _isEditing);
 
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Gespeichert!'), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text(_isEditing ? 'Änderungen gespeichert!' : 'Gespeichert!'),
+              backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -212,15 +222,14 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       }
     }
   }
-  // --- ENDE DER ÄNDERUNG ---
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F0),
       appBar: AppBar(
-        title: const Text('Ergebnis speichern',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(_isEditing ? 'Session bearbeiten' : 'Ergebnis speichern',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFFF9500),
         foregroundColor: Colors.white,
         automaticallyImplyLeading: true,
@@ -230,24 +239,25 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    '${(widget.durationMS / 1000).toStringAsFixed(2)}s',
-                    style: const TextStyle(
-                        fontSize: 72,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFF9500)),
-                  ),
-                  const Text('ENDZEIT',
-                      style: TextStyle(
-                          letterSpacing: 2,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold)),
-                ],
+            if (!_isEditing)
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      '${((widget.durationMS ?? 0) / 1000).toStringAsFixed(2)}s',
+                      style: const TextStyle(
+                          fontSize: 72,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFFFF9500)),
+                    ),
+                    const Text('ENDZEIT',
+                        style: TextStyle(
+                            letterSpacing: 2,
+                            color: Colors.grey,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 32),
             const Text('WER HAT GETRICHTERT? *',
                 style: TextStyle(fontWeight: FontWeight.bold)),
@@ -337,8 +347,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                 ),
                 child: _isSaving
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('FERTIG & SPEICHERN',
-                    style: TextStyle(
+                    : Text(_isEditing ? 'ÄNDERUNGEN SPEICHERN' : 'FERTIG & SPEICHERN',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
                         fontWeight: FontWeight.bold)),

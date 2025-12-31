@@ -216,7 +216,3 @@ class SyncService {
     }
   }
 }
-
-
-
-
