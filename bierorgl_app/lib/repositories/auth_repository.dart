@@ -146,4 +146,21 @@ class AuthRepository {
   Future<Response> delete(String path, {dynamic data}) {
     return _dio.delete(path, data: data);
   }
+
+  /// Returns the userId from the stored token *without* checking expiry/refresh.
+  /// This is used on app startup so we don't block on network calls.
+  Future<String?> getStoredUserIdAllowingExpired() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token == null) return null;
+
+      final decodedToken = JwtDecoder.decode(token);
+      final userId = decodedToken['user_id']?.toString();
+      return userId;
+    } catch (e) {
+      print('Fehler beim lokalen Dekodieren des Tokens: $e');
+      return null;
+    }
+  }
+
 }

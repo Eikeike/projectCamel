@@ -1,58 +1,65 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // NEU für Orientierung
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:project_camel/services/auto_sync_controller.dart';
-import 'package:project_camel/services/sync_service.dart';
-import 'cubits/auth_cubit.dart';
-import 'repositories/auth_repository.dart';
+import 'package:project_camel/providers.dart';
+import 'package:project_camel/auth/auth_providers.dart';
+
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/device_selection_screen.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized(); // NEU
+  WidgetsFlutterBinding.ensureInitialized();
 
-  // Erlaube beide Orientierungen
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
-  final authRepository = AuthRepository();
-  final syncService = SyncService(authRepository: authRepository);
-  final autoSyncController = AutoSyncController(syncService);
 
-  runApp(ProviderScope(
-      child: MyApp(
-          authRepository: authRepository,
-          autoSyncController: autoSyncController)));
+  runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatelessWidget {
-  final AuthRepository authRepository;
-  final AutoSyncController autoSyncController;
-
-  const MyApp({super.key, required this.authRepository, required this.autoSyncController});
+class MyApp extends ConsumerWidget {
+  const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => AuthCubit(authRepository),
-      child: MaterialApp(
-        title: 'Bierorgl App',
-        initialRoute: '/login',
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.light,
-        ),
-        routes: {
-          '/login': (context) => const LoginScreen(),
-          '/home': (context) =>  HomeScreen(autoSyncController: autoSyncController,),
-          '/bluetooth': (context) => const DeviceSelectionScreen(),
-        },
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(autoSyncControllerProvider);
+
+    return MaterialApp(
+      title: 'Bierorgl App',
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.light,
       ),
+      home: const AuthGate(),
+      routes: {
+        '/bluetooth': (context) => const DeviceSelectionScreen(),
+      },
     );
+  }
+}
+
+class AuthGate extends ConsumerWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
+    final autoSyncController = ref.watch(autoSyncControllerProvider);
+
+    if (authState.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (!authState.isAuthenticated) {
+      return const LoginScreen();
+    }
+
+    return HomeScreen(autoSyncController: autoSyncController);
   }
 }
