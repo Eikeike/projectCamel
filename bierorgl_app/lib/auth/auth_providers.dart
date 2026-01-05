@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/repositories/auth_repository.dart';
+import '../services/database_helper.dart';
+
 
 
 class AuthState {
@@ -33,11 +35,10 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 class AuthController extends Notifier<AuthState> {
-  late final AuthRepository _authRepository;
+  AuthRepository get _authRepository => ref.read(authRepositoryProvider);
 
   @override
   AuthState build() {
-    _authRepository = ref.read(authRepositoryProvider);
     _loadInitialAuthState();
     return const AuthState(isLoading: true);
   }
@@ -73,6 +74,11 @@ class AuthController extends Notifier<AuthState> {
           'Login erfolgreich, aber User-ID konnte nicht abgerufen werden.',
         );
       }
+
+      // lass das mal bitte rausnehmen. TODO REFACTOR
+      await DatabaseHelper().updateLoggedInUser(userId);
+      // weil über den riverpod state kriegen wir jetzt immer auch die userID.
+
 
       if (!ref.mounted) return;
       state = state.copyWith(

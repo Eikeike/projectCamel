@@ -1,19 +1,23 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/providers.dart';
+import '../auth/auth_providers.dart';
+
 import '../services/database_helper.dart';
 import 'package:intl/intl.dart';
 
 import 'session_graph_screen.dart'; // NEU: Import für den Graphen-Screen
 import 'session_screen.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
   String selectedVolumeLabel = 'Alle';
 
@@ -22,7 +26,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (selectedVolumeLabel == '0,5 L') return 500;
     return null;
   }
-
+  Future<void> _logout() async {
+    ref.read(autoSyncControllerProvider).disable();
+    await DatabaseHelper().updateLoggedInUser(null);
+    await ref.read(authControllerProvider.notifier).logout();
+  }
   Future<void> _reloadData() async {
     setState(() {});
   }
@@ -194,6 +202,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 24),
 
                   _buildHistoryCard(history),
+                  const SizedBox(height: 20),
+
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _logout,
+                    child: const Text(
+                      "Logout",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
                 ],
               ),
             );
