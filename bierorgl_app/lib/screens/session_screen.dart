@@ -46,7 +46,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   @override
   void initState() {
     super.initState();
-    print("DEBUG_ML (session_screen): initState gestartet. isEditing: $_isEditing");
+    print(
+        "DEBUG_ML (session_screen): initState gestartet. isEditing: $_isEditing");
 
     if (_isEditing) {
       final s = widget.session!;
@@ -56,7 +57,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       _selectedVolumeML = s['volumeML'] ?? 500;
     } else {
       String formattedDate =
-      DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
+          DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
       _nameController =
           TextEditingController(text: "Trichterung vom $formattedDate");
 
@@ -66,17 +67,21 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         // Toleranz von 75ml
         if ((measuredVolume - 330).abs() <= 75) {
           _selectedVolumeML = 330; // Wähle 0,33L vor
-          print("DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 330ml. Wähle 0,33L vor.");
+          print(
+              "DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 330ml. Wähle 0,33L vor.");
         } else if ((measuredVolume - 500).abs() <= 75) {
           _selectedVolumeML = 500; // Wähle 0,5L vor
-          print("DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 500ml. Wähle 0,5L vor.");
+          print(
+              "DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 500ml. Wähle 0,5L vor.");
         } else {
           _selectedVolumeML = measuredVolume; // Setze den exakten Custom-Wert
-          print("DEBUG_ML (session_screen): Messung ($measuredVolume ml) außerhalb der Toleranz. Wähle Custom-Wert vor.");
+          print(
+              "DEBUG_ML (session_screen): Messung ($measuredVolume ml) außerhalb der Toleranz. Wähle Custom-Wert vor.");
         }
       } else {
         _selectedVolumeML = 500; // Fallback
-        print("DEBUG_ML (session_screen): Kein gültiges Volumen gemessen. Fallback auf 500ml.");
+        print(
+            "DEBUG_ML (session_screen): Kein gültiges Volumen gemessen. Fallback auf 500ml.");
       }
     }
 
@@ -89,7 +94,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     _nameController.dispose();
     super.dispose();
   }
-
 
   Future<void> _getCurrentLocation() async {
     // Check if the widget is still mounted before calling setState.
@@ -125,7 +129,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   Future<void> _loadInitialData() async {
     final users = await _dbHelper.getUsers();
     final events = await _dbHelper.getEvents();
-    if(mounted) {
+    if (mounted) {
       setState(() {
         _users = users;
         _events = events;
@@ -156,7 +160,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   'userID': newId,
                   'name': guestController.text,
                   'username':
-                  'gast_${guestController.text.toLowerCase().replaceAll(' ', '_')}',
+                      'gast_${guestController.text.toLowerCase().replaceAll(' ', '_')}',
                   'eMail': 'gast@bierorgl.de',
                 });
                 await _loadInitialData();
@@ -175,7 +179,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   Future<void> _processSave() async {
     if (_selectedUserID == null) {
-      if(mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('Fehler: Wer hat getrichtert? (Pflichtfeld)'),
@@ -187,21 +191,21 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
     if (_nameController.text.isEmpty || _selectedEventID == null) {
       bool confirm = await showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Angaben unvollständig'),
-          content: const Text(
-              'Titel der Trichterung oder Event fehlen. Trotzdem speichern?'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Zurück')),
-            TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Ja, egal')),
-          ],
-        ),
-      ) ??
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Angaben unvollständig'),
+              content: const Text(
+                  'Titel der Trichterung oder Event fehlen. Trotzdem speichern?'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Zurück')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Ja, egal')),
+              ],
+            ),
+          ) ??
           false;
       if (!confirm) return;
     }
@@ -214,21 +218,34 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
     try {
       final sessionData = {
-        'sessionID': _isEditing ? widget.session!['sessionID'] : const Uuid().v4(),
-        'startedAt': _isEditing ? widget.session!['startedAt'] : DateTime.now().toIso8601String(),
+        'sessionID':
+            _isEditing ? widget.session!['sessionID'] : const Uuid().v4(),
+        'startedAt': _isEditing
+            ? widget.session!['startedAt']
+            : DateTime.now().toIso8601String(),
         'userID': _selectedUserID,
         'volumeML': _selectedVolumeML,
-        'durationMS': _isEditing ? widget.session!['durationMS'] : widget.durationMS,
+        'durationMS':
+            _isEditing ? widget.session!['durationMS'] : widget.durationMS,
         'eventID': _selectedEventID,
         'name': _nameController.text.isNotEmpty ? _nameController.text : null,
         'description': _isEditing ? widget.session!['description'] : null,
-        'latitude': _isEditing ? widget.session!['latitude'] : (_currentPosition?.latitude ?? 0.0),
-        'longitude': _isEditing ? widget.session!['longitude'] : (_currentPosition?.longitude ?? 0.0),
-        'valuesJSON': _isEditing ? widget.session!['valuesJSON'] : jsonEncode(widget.allValues),
-        'calibrationFactor': _isEditing ? widget.session!['calibrationFactor'] : widget.calibrationFactor?.toInt(),
+        'latitude': _isEditing
+            ? widget.session!['latitude']
+            : (_currentPosition?.latitude ?? 0.0),
+        'longitude': _isEditing
+            ? widget.session!['longitude']
+            : (_currentPosition?.longitude ?? 0.0),
+        'valuesJSON': _isEditing
+            ? widget.session!['valuesJSON']
+            : jsonEncode(widget.allValues),
+        'calibrationFactor': _isEditing
+            ? widget.session!['calibrationFactor']
+            : widget.calibrationFactor?.toInt(),
       };
 
-      print("DEBUG_ML (session_screen): Speichere Session. Der 'calibrationFactor', der in die DB geht, ist ${sessionData['calibrationFactor']}");
+      print(
+          "DEBUG_ML (session_screen): Speichere Session. Der 'calibrationFactor', der in die DB geht, ist ${sessionData['calibrationFactor']}");
 
       await _dbHelper.saveSessionForSync(sessionData, isEditing: _isEditing);
 
@@ -236,12 +253,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(_isEditing ? 'Änderungen gespeichert!' : 'Gespeichert!'),
+              content:
+                  Text(_isEditing ? 'Änderungen gespeichert!' : 'Gespeichert!'),
               backgroundColor: Colors.green),
         );
       }
     } catch (e) {
-      if(mounted) {
+      if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Fehler beim Speichern: $e')));
@@ -249,13 +267,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F0),
       appBar: AppBar(
-        title: Text(_isEditing ? 'Trichterung Bearbeiten' : 'Ergebnis speichern',
+        title: Text(
+            _isEditing ? 'Trichterung Bearbeiten' : 'Ergebnis speichern',
             style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFFFF9500),
         foregroundColor: Colors.white,
@@ -298,11 +316,11 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                     hint: const Text('User wählen'),
                     items: _users
                         .map((u) => DropdownMenuItem(
-                      value: u['userID'] as String,
-                      child: Text(u['username'] ??
-                          u['name'] ??
-                          'Unbekannter User'),
-                    ))
+                              value: u['userID'] as String,
+                              child: Text(u['username'] ??
+                                  u['name'] ??
+                                  'Unbekannter User'),
+                            ))
                         .toList(),
                     onChanged: (val) => setState(() => _selectedUserID = val),
                     decoration: const InputDecoration(
@@ -333,9 +351,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               hint: const Text('Optional: Event zuordnen'),
               items: _events
                   .map((e) => DropdownMenuItem(
-                value: e['eventID'] as String,
-                child: Text(e['name'] ?? 'Event'),
-              ))
+                        value: e['eventID'] as String,
+                        child: Text(e['name'] ?? 'Event'),
+                      ))
                   .toList(),
               onChanged: (val) => setState(() => _selectedEventID = val),
               decoration: const InputDecoration(
@@ -355,7 +373,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                 child: Center(
                   child: Text(
                     'Messung: ${widget.calculatedVolumeML} ml',
-                    style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic),
+                    style: TextStyle(
+                        color: Colors.grey[600], fontStyle: FontStyle.italic),
                   ),
                 ),
               ),
@@ -387,11 +406,14 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                 ),
                 child: _isSaving
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(_isEditing ? 'ÄNDERUNGEN SPEICHERN' : 'FERTIG & SPEICHERN',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
+                    : Text(
+                        _isEditing
+                            ? 'ÄNDERUNGEN SPEICHERN'
+                            : 'FERTIG & SPEICHERN',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold)),
               ),
             ),
             const SizedBox(height: 12),
@@ -420,7 +442,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         if (custom) {
           _showCustomVol();
         } else {
-          print("DEBUG_ML (session_screen): Volumen manuell auf $ml ml geändert.");
+          print(
+              "DEBUG_ML (session_screen): Volumen manuell auf $ml ml geändert.");
           setState(() => _selectedVolumeML = ml);
         }
       },
@@ -449,7 +472,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             onPressed: () {
               final int? customVolume = int.tryParse(c.text);
               if (customVolume != null && customVolume > 0) {
-                print("DEBUG_ML (session_screen): Eigenes Volumen '$customVolume ml' über Dialog gesetzt.");
+                print(
+                    "DEBUG_ML (session_screen): Eigenes Volumen '$customVolume ml' über Dialog gesetzt.");
                 setState(() => _selectedVolumeML = customVolume);
               }
               Navigator.pop(context);

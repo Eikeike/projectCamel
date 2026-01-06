@@ -1,15 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/models/event.dart';
+import 'package:project_camel/models/session.dart';
 import 'package:project_camel/repositories/event_repository.dart';
+import 'package:project_camel/repositories/sesion_repository.dart';
 import 'package:project_camel/services/auto_sync_controller.dart';
 import 'package:project_camel/services/database_helper.dart';
 import 'package:project_camel/services/sync_service.dart';
 import 'package:project_camel/auth/auth_providers.dart';
 
-
-
 final syncServiceProvider = Provider<SyncService>((ref) {
-  final authRepo = ref.read(authRepositoryProvider);//oder ref.watch?
+  final authRepo = ref.read(authRepositoryProvider); //oder ref.watch?
   return SyncService(authRepository: authRepo);
 });
 
@@ -20,8 +20,10 @@ final autoSyncControllerProvider = Provider<AutoSyncController>((ref) {
 });
 
 final databaseHelperProvider = Provider<DatabaseHelper>((ref) {
-  return DatabaseHelper(); 
+  return DatabaseHelper();
 });
+
+/// --- Event ---
 
 final eventRepositoryProvider = Provider<EventRepository>((ref) {
   final dbHelper = ref.watch(databaseHelperProvider);
@@ -33,7 +35,26 @@ final allEventsProvider = FutureProvider<List<Event>>((ref) async {
   return repo.getAllEvents();
 });
 
-final eventByIdProvider = FutureProvider.family<Event?, String>((ref, id) async {
+final eventByIdProvider =
+    FutureProvider.family<Event?, String>((ref, id) async {
   final repo = ref.watch(eventRepositoryProvider);
   return repo.getEventById(id);
+});
+
+/// --- Session ---
+
+final sessionRepositoryProvider = Provider<SessionRepository>((ref) {
+  final dbHelper = ref.watch(databaseHelperProvider);
+  return SessionRepository(dbHelper);
+});
+
+final allSessionsProvider = FutureProvider<List<Session>>((ref) async {
+  final repo = ref.watch(sessionRepositoryProvider);
+  return repo.getAllSessions();
+});
+
+final sessionByIdProvider =
+    FutureProvider.family<Session?, String>((ref, id) async {
+  final repo = ref.watch(sessionRepositoryProvider);
+  return repo.getSessionById(id);
 });

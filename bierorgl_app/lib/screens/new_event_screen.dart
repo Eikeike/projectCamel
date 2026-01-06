@@ -26,7 +26,6 @@ class NewEventScreen extends ConsumerWidget {
         centerTitle: true,
       ),
       body: eventsAsync.when(
-        
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, stack) => Center(child: Text('Error: $err')),
         data: (events) {
@@ -39,48 +38,48 @@ class NewEventScreen extends ConsumerWidget {
             child: FractionallySizedBox(
               heightFactor: 0.8,
               child: Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
                   ),
                 ),
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: events.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
-                    itemBuilder: (context, index) {
-                      final event = events[index];
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: events.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) {
+                        final event = events[index];
 
-                      final isFirst = index == 0;
-                      final isLast = index == events.length - 1;
+                        final isFirst = index == 0;
+                        final isLast = index == events.length - 1;
 
-                      final borderRadius = BorderRadius.vertical(
-                        top: isFirst ? const Radius.circular(14) : Radius.zero,
-                        bottom: isLast ? const Radius.circular(14) : Radius.zero,
-                      );
+                        final borderRadius = BorderRadius.vertical(
+                          top:
+                              isFirst ? const Radius.circular(14) : Radius.zero,
+                          bottom:
+                              isLast ? const Radius.circular(14) : Radius.zero,
+                        );
 
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerLow, // or any bg color
-                          borderRadius: borderRadius,
-                        ),
-                        child: EventListTile(event: event),
-                      );
-                    },
-                  )
-                ),
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerLow, // or any bg color
+                            borderRadius: borderRadius,
+                          ),
+                          child: EventListTile(event: event),
+                        );
+                      },
+                    )),
               ),
             ),
           );
-
-
-
         },
       ),
     );
