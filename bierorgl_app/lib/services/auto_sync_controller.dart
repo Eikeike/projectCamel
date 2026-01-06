@@ -12,10 +12,23 @@ class AutoSyncController {
   Timer? _debounceTimer;
   bool _isSyncing = false;
   bool _hasPendingChanges = false;
+  bool _enabled = true;   
 
   AutoSyncController(this._syncService, this._ref);
 
+
+  void disable() {
+    _enabled = false;
+    _debounceTimer?.cancel();
+  }
+
+  void enable() {
+    _enabled = true;
+  }
+
+
   void triggerSync() {
+    if (!_enabled) return;
     _hasPendingChanges = true;
     _debounceTimer?.cancel();
     _debounceTimer = Timer(
@@ -25,6 +38,7 @@ class AutoSyncController {
   }
 
   Future<void> _runIfNeeded() async {
+    if (!_enabled) return;  
     if (_isSyncing || !_hasPendingChanges) return;
 
     _isSyncing = true;

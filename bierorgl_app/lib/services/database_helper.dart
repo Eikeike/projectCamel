@@ -2,6 +2,7 @@ import 'package:project_camel/core/constants.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import 'package:project_camel/models/event.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -115,10 +116,10 @@ class DatabaseHelper {
     Database db = await database;
     return await db.insert('Session', session);
   }
-
+  //Löschen? und alles in eigene repos auslagern
   Future<List<Map<String, dynamic>>> getEvents() async {
     Database db = await database;
-    return await db.query('Event', where: 'localDeletedAt IS NULL');
+    return await db.query('Event', where: 'localDeletedAt IS NULL', orderBy: 'dateFrom DESC');
   }
 
   Future<List<Map<String, dynamic>>> getUsers() async {

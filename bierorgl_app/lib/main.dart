@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/providers.dart';
 import 'package:project_camel/auth/auth_providers.dart';
+import 'package:project_camel/theme/app_theme.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -30,10 +31,9 @@ class MyApp extends ConsumerWidget {
 
     return MaterialApp(
       title: 'Bierorgl App',
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-      ),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.light,
       home: const AuthGate(),
       routes: {
         '/bluetooth': (context) => const DeviceSelectionScreen(),
