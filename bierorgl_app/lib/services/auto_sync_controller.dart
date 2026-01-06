@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/core/constants.dart';
+import 'package:project_camel/providers.dart';
 import 'package:project_camel/services/sync_service.dart';
 import 'package:project_camel/auth/auth_providers.dart'; // for authControllerProvider
 
@@ -12,10 +13,9 @@ class AutoSyncController {
   Timer? _debounceTimer;
   bool _isSyncing = false;
   bool _hasPendingChanges = false;
-  bool _enabled = true;   
+  bool _enabled = true;
 
   AutoSyncController(this._syncService, this._ref);
-
 
   void disable() {
     _enabled = false;
@@ -25,7 +25,6 @@ class AutoSyncController {
   void enable() {
     _enabled = true;
   }
-
 
   void triggerSync() {
     if (!_enabled) return;
@@ -38,7 +37,7 @@ class AutoSyncController {
   }
 
   Future<void> _runIfNeeded() async {
-    if (!_enabled) return;  
+    if (!_enabled) return;
     if (_isSyncing || !_hasPendingChanges) return;
 
     _isSyncing = true;
@@ -46,6 +45,7 @@ class AutoSyncController {
 
     try {
       await _syncService.sync();
+      _notifyDataChanged();
     } on DioException catch (e, s) {
       print("AutoSyncController: sync failed (DioException): $e\n$s");
 
@@ -65,5 +65,10 @@ class AutoSyncController {
         _runIfNeeded();
       }
     }
+  }
+
+  void _notifyDataChanged() {
+    _ref.invalidate(eventRepositoryProvider);
+    _ref.invalidate(sessionRepositoryProvider);
   }
 }
