@@ -7,6 +7,7 @@ import '../services/bluetooth_service.dart';
 import 'session_screen.dart';
 import '../services/sync_service.dart';
 import '../repositories/auth_repository.dart';
+import '../widgets/bluetooth_settings_tile.dart';
 
 class TrichternScreen extends ConsumerStatefulWidget {
   const TrichternScreen({super.key});
@@ -29,7 +30,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       final device = ref.read(bluetoothServiceProvider).connectedDevice;
       if (device != null) {
         device.connectionState.first.then((currentState) {
-          if (currentState == BluetoothConnectionState.disconnected && mounted) {
+          if (currentState == BluetoothConnectionState.disconnected &&
+              mounted) {
             ref.read(bluetoothServiceProvider.notifier).forceResetState();
           }
         });
@@ -47,7 +49,10 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     if (bytes.length < 4) return [];
     List<int> result = [];
     for (int i = 0; i <= bytes.length - 4; i += 4) {
-      int ticks = bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24);
+      int ticks = bytes[i] |
+          (bytes[i + 1] << 8) |
+          (bytes[i + 2] << 16) |
+          (bytes[i + 3] << 24);
       int ms = ((ticks * factor) ~/ 1000);
       result.add(ms);
     }
@@ -57,11 +62,12 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   @override
   Widget build(BuildContext context) {
     final bluetoothState = ref.watch(bluetoothServiceProvider);
-    final isConnected = bluetoothState.connectedDevice != null;
+    //final isConnected = bluetoothState.connectedDevice != null;
+    final isConnected = true;
 
     ref.listen(bluetoothServiceProvider, (previous, next) {
-      final bool wasJustFinished =
-      (previous?.isSessionFinished == false && next.isSessionFinished == true);
+      final bool wasJustFinished = (previous?.isSessionFinished == false &&
+          next.isSessionFinished == true);
 
       if (wasJustFinished && next.lastDurationMS > 0) {
         final rawBytes = next.receivedData.last.timeValues;
@@ -72,7 +78,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
         // ### NEU: Berechne das Volumen direkt hier ###
         int? calculatedVolumeML;
         if (volumeCalibrationFactor != null && volumeCalibrationFactor > 0) {
-          final double calculatedVolume = (processed.length / (2 * volumeCalibrationFactor)) * 1000;
+          final double calculatedVolume =
+              (processed.length / (2 * volumeCalibrationFactor)) * 1000;
           calculatedVolumeML = calculatedVolume.round();
         }
 
@@ -81,9 +88,9 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
           print("  -> durationMS: ${next.lastDurationMS}");
           print("  -> allValues (Anzahl): ${processed.length}");
           print("  -> timeCalibrationFactor: $timeCalibrationFactor");
-          print("  -> KORREKT übergebener volumeCalibrationFactor: $volumeCalibrationFactor");
+          print(
+              "  -> KORREKT übergebener volumeCalibrationFactor: $volumeCalibrationFactor");
           print("  -> Berechnetes Volumen: $calculatedVolumeML ml");
-
 
           Navigator.push(
             context,
@@ -106,63 +113,39 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F0),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(20),
+            // --- OBERER BEREICH (Bleibt oben) ---
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
                   Text(
                     'BIERORGL',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFFF9500)),
+                        color: Theme.of(context).colorScheme.primary),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'Bereit zum Ballern!',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 16,
+                        color: Theme.of(context).colorScheme.onSurface),
                   ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: InkWell(
-                onTap: () => Navigator.pushNamed(context, '/bluetooth'),
-                child: Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.bluetooth,
-                                color: isConnected
-                                    ? const Color(0xFF2196F3)
-                                    : Colors.grey[400]),
-                            const SizedBox(width: 12),
-                            Text(isConnected
-                                ? 'Verbunden: ${bluetoothState.connectedDevice?.platformName}'
-                                : 'Trichter verbinden'),
-                          ],
-                        ),
-                        const Icon(Icons.chevron_right, color: Colors.grey),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 40),
+
+            // Bluetooth-Schaltfläche (Direkt unter dem Header)
+            const BluetoothSettingsTile(),
+            // --- MITTLERER BEREICH (Nimmt den restlichen Platz ein und zentriert den Kreis) ---
             Expanded(
               child: Center(
                 child: Container(
@@ -170,20 +153,26 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                   height: 280,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.surfaceContainer,
                     boxShadow: [
                       BoxShadow(
                         color: (isConnected
-                            ? Colors.green.withOpacity(0.2)
-                            : Colors.red.withOpacity(0.2)),
-                        blurRadius: 40,
+                            ? Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.2)
+                            : Theme.of(context)
+                                .colorScheme
+                                .error
+                                .withOpacity(0.2)),
+                        blurRadius: 20,
                         spreadRadius: 10,
                       ),
                     ],
                     border: Border.all(
                       color: (isConnected
-                          ? const Color(0xFF4CAF50)
-                          : const Color(0xFFFF5252)),
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.error),
                       width: 8,
                     ),
                   ),
@@ -196,12 +185,15 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                             : Icons.bluetooth_disabled,
                         size: 80,
                         color: isConnected
-                            ? const Color(0xFF4CAF50)
-                            : const Color(0xFFFF5252),
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.error,
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        bluetoothState.isSessionActive ? 'LÄUFT...' : 'READY',
+                        bluetoothState.isSessionActive
+                            ? 'Bereit'
+                            : 'Keine Verbindung',
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
                             fontSize: 20, fontWeight: FontWeight.bold),
                       ),
@@ -210,14 +202,17 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                 ),
               ),
             ),
+
+            // --- UNTERER BEREICH (Footer Text) ---
             Padding(
-              padding: const EdgeInsets.all(30),
+              padding: const EdgeInsets.only(bottom: 40, left: 30, right: 30),
               child: Text(
                 bluetoothState.isSessionActive
                     ? "Nicht vom Schlauch gehen!"
                     : "Warte auf ersten Schluck...",
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w500),
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
               ),
             ),
           ],
