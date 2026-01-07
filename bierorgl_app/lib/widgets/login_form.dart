@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import '../cubits/auth_cubit.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/auth/auth_providers.dart';
 
-class LoginForm extends StatefulWidget {
+class LoginForm extends ConsumerStatefulWidget {
   const LoginForm({super.key});
 
   @override
-  State<LoginForm> createState() => _LoginFormState();
+  ConsumerState<LoginForm> createState() => _LoginFormState();
 }
 
-class _LoginFormState extends State<LoginForm> {
+class _LoginFormState extends ConsumerState<LoginForm> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -20,8 +20,26 @@ class _LoginFormState extends State<LoginForm> {
     super.dispose();
   }
 
+  Future<void> _submit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte E-Mail und Passwort eingeben')),
+      );
+      return;
+    }
+
+    await ref.read(authControllerProvider.notifier).login(email, password);
+    // Navigation + DB update are handled in LoginScreen/AuthGate.
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authControllerProvider);
+    final isLoading = authState.isLoading;
+
     return Column(
       children: [
         TextField(
@@ -42,20 +60,18 @@ class _LoginFormState extends State<LoginForm> {
           ),
         ),
         const SizedBox(height: 24),
-        BlocBuilder<AuthCubit, AuthState>(
-          builder: (context, state) {
-            if (state is AuthLoading) {
-              return const CircularProgressIndicator();
-            }
-            return ElevatedButton(
-              onPressed: () {
-                final email = _emailController.text;
-                final password = _passwordController.text;
-                context.read<AuthCubit>().login(email, password);
-              },
-              child: const Text('Login'),
-            );
-          },
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: isLoading ? null : _submit,
+            child: isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Login'),
+          ),
         ),
       ],
     );

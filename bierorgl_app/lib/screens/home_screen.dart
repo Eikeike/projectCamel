@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:project_camel/screens/debug_screen.dart';
+import 'package:project_camel/screens/new_event_screen.dart';
+import 'package:project_camel/services/auto_sync_controller.dart';
 import 'trichtern_screen.dart';
 import 'leaderboard_screen.dart';
 import 'profile_screen.dart';
-import 'event_screen.dart'; // Import für deinen neuen Screen
+import 'event_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    required this.autoSyncController,
+  });
+
+  final AutoSyncController autoSyncController;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -13,12 +21,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
+  AutoSyncController get autoSyncController => widget.autoSyncController;
+
+
 
   final List<Widget> _screens = [
     const TrichternScreen(),
-    const EventScreen(),      // Neuer Event Screen
+    const NewEventScreen(),
     const LeaderboardScreen(),
     const ProfileScreen(),
+    const DebugScreen(),
   ];
 
   @override
@@ -41,11 +53,12 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _currentIndex = index;
             });
+            autoSyncController.triggerSync();
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: const Color(0xFFFF9500),
-          unselectedItemColor: Colors.grey,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          selectedItemColor: Theme.of(context).colorScheme.primary,
+          unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
           selectedLabelStyle: const TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 12,
@@ -70,6 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.person),
               label: 'Profil',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.bug_report),
+              label: 'DEBUG',
             ),
           ],
         ),
