@@ -110,18 +110,18 @@ class BluetoothSettingsTile extends ConsumerWidget {
                             child: InkWell(
                               borderRadius: borderRadius,
                               onTap: () async {
-                                // 1. Scan stoppen (notifier nutzen!)
-                                await ref
-                                    .read(trichterScanProvider.notifier)
-                                    .stopScan();
+                                final scanNotifier =
+                                    ref.read(trichterScanProvider.notifier);
+                                final connectionNotifier =
+                                    ref.read(trichterConnectionProvider.notifier);
 
-                                // 2. Verbindung zum gewählten Gerät aufbauen
-                                ref
-                                    .read(trichterConnectionProvider.notifier)
-                                    .connect(result.device);
+                                await scanNotifier.stopScan();
 
-                                // 3. Panel schließen
-                                Navigator.pop(context);
+                                connectionNotifier.connect(result.device);
+
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                }
                               },
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(

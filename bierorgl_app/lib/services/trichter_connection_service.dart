@@ -58,6 +58,8 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
           timeout: const Duration(seconds: 10),
           autoConnect: false,
           license: License.free);
+          
+      if (!ref.mounted) return;
 
       // Status-Listener: Falls das Gerät außer Reichweite geht oder ausgeschaltet wird
       _connectionStateSubscription?.cancel();
@@ -100,7 +102,7 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
 }
 
 // Hier nutzen wir wieder autoDispose für die Müllabfuhr
-final trichterConnectionProvider = NotifierProvider.autoDispose<
+final trichterConnectionProvider = NotifierProvider<
     TrichterConnectionService, TrichterConnectionState>(() {
   return TrichterConnectionService();
 });
