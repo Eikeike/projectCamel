@@ -7,41 +7,40 @@ class DebugScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authControllerProvider);
+    // Nur den Ladezustand beobachten, um unnötige Rebuilds des gesamten Screens zu vermeiden
+    final isLoading =
+        ref.watch(authControllerProvider.select((s) => s.isLoading));
 
-    if (authState.isLoading) {
+    if (isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    final userId = authState.userId!; 
-
     return Scaffold(
-  appBar: AppBar(title: const Text('Theme Debug')),
-  body: const DefaultTabController(
-    length: 2,
-    child: Column(
-      children: [
-        TabBar(
-          tabs: [
-            Tab(text: 'Colors'),
-            Tab(text: 'Text'),
+      appBar: AppBar(title: const Text('Theme Debug')),
+      body: const DefaultTabController(
+        length: 2,
+        child: Column(
+          children: [
+            TabBar(
+              tabs: [
+                Tab(text: 'Colors'),
+                Tab(text: 'Text'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  ColorSchemePreview(),
+                  Center(child: Text("Text Theme Preview Placeholder")),
+                ],
+              ),
+            ),
           ],
         ),
-        Expanded(
-          child: TabBarView(
-            children: [
-              ColorSchemePreview(),
-              //TextThemePreview(),
-            ],
-          ),
-        ),
-      ],
-    ),
-  ),
-);
-
+      ),
+    );
   }
 }
 
@@ -52,6 +51,7 @@ class ColorSchemePreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
+    // Kompakte Liste der anzuzeigenden Farben
     final entries = <(String, Color)>[
       ('primary', scheme.primary),
       ('onPrimary', scheme.onPrimary),
@@ -73,34 +73,55 @@ class ColorSchemePreview extends StatelessWidget {
       ('outlineVariant', scheme.outlineVariant),
     ];
 
-    return ListView(
+    return ListView.builder(
       padding: const EdgeInsets.all(12),
-      children: [
-        const Text('ColorScheme', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
-        ...entries.map((e) {
-          final name = e.$1;
-          final color = e.$2;
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final name = entries[index].$1;
+        final color = entries[index].$2;
 
-          return Container(
-            margin: const EdgeInsets.symmetric(vertical: 6),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.black12),
-            ),
-            child: Text(
-              name,
-              style: TextStyle(
-                color: ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-                    ? Colors.white
-                    : Colors.black,
+        // Effiziente Helligkeitsberechnung statt ThemeData.estimateBrightness
+        final double luminance = color.computeLuminance();
+        final Color textColor = luminance > 0.5 ? Colors.black : Colors.white;
+
+        return Container(
+          key: ValueKey(name),
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.black.withOpacity(0.1)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
               ),
-            ),
-          );
-        }),
-      ],
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                name,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '#${color.value.toRadixString(16).padLeft(8, '0').toUpperCase()}',
+                style: TextStyle(
+                  color: textColor.withOpacity(0.7),
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
