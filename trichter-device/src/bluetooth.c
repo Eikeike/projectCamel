@@ -19,8 +19,9 @@
 #define MAX_SDU_SIZE_BYTE       243 //247 MTU - 4 byte header
 #define COUNT_BYTES(num)        (num * sizeof(uint32_t))
 
-static bool g_is_advertising = 0;
-static bool g_is_connected = 0;
+static bool g_is_advertising = false;
+static bool g_is_connected = false;
+static bool g_restart_adv = false;
 
 static uint8_t g_timer_tick_duration = 0;
 
@@ -189,6 +190,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
         return;
     }
     ble_stop_adv();
+    g_restart_adv = false;
     g_is_connected = 1;
     g_bulk_service.current_conn = bt_conn_ref(conn);
 }
@@ -207,13 +209,18 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     printk("Disconnected (reason 0x%02x)\n", reason);
     g_is_connected = 0;
     bt_conn_unref(g_bulk_service.current_conn);
+    g_restart_adv = true;
 }
 
 
 static void recycled()
 {
-    printk("Recycled; starting advertising");
-    ble_start_adv();
+    printk("Recycled; %s starting advertising", g_restart_adv ? "" : "NOT");
+    if (g_restart_adv)
+    {
+        ble_start_adv();
+        g_restart_adv = true;
+    }
 }
 
 
