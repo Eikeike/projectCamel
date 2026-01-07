@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/trichter_scanner_service.dart';
+import '../services/trichter_connection_service.dart';
 
 class BluetoothSettingsTile extends ConsumerWidget {
   const BluetoothSettingsTile({super.key});
@@ -108,11 +109,18 @@ class BluetoothSettingsTile extends ConsumerWidget {
                             color: Colors.transparent,
                             child: InkWell(
                               borderRadius: borderRadius,
-                              onTap: () {
-                                // Scan stoppen und Fenster schließen
-                                ref
+                              onTap: () async {
+                                // 1. Scan stoppen (notifier nutzen!)
+                                await ref
                                     .read(trichterScanProvider.notifier)
                                     .stopScan();
+
+                                // 2. Verbindung zum gewählten Gerät aufbauen
+                                ref
+                                    .read(trichterConnectionProvider.notifier)
+                                    .connect(result.device);
+
+                                // 3. Panel schließen
                                 Navigator.pop(context);
                               },
                               child: Padding(
