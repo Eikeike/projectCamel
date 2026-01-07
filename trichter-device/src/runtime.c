@@ -60,12 +60,13 @@ void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, un
 		k_work_schedule(&sensor_qualification_work, SENSOR_QUALIFICATION_BURST_WINDOW_MS);
 		is_running = true;
 	}
-	if (g_timestamp_idx_to_write < TICKS_PER_LTR)
+	if (g_timestamp_idx_to_write < TICKS_PER_LTR && is_running)
 	{
 		g_timestamps[g_timestamp_idx_to_write] = nrf_timer_cc_get(NRF_TIMER2, 1); //Read value on channel 1
 		printk("Sensor pressed at %d\n", g_timestamps[g_timestamp_idx_to_write]);
+		g_timestamp_idx_to_write++;
 	}
-	g_timestamp_idx_to_write++;
+	
 	
 /* 	if (g_stateMachine.current->id == STATE_RUNNING || g_stateMachine.requestStateDeferred == STATE_RUNNING ||
 		g_stateMachine.current->id == STATE_CALIBRATING|| g_stateMachine.requestStateDeferred == STATE_CALIBRATING)
@@ -73,6 +74,16 @@ void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, un
 		
 	} */
 }
+
+
+
+void reset_sensor_run_state()
+{
+    is_running = false;
+    k_work_cancel_delayable(&sensor_qualification_work);
+    g_valid_calibration = false;
+}
+
 
 /*
 This is hit 150ms after the very first interrupt, if this is not a detected burst, return like nothing happened
@@ -89,11 +100,11 @@ static void sensor_qualification_handler(struct k_work *work)
 			g_valid_calibration = true;
 		}
 	} else {
-		g_valid_calibration = false;
+		unsigned int key = irq_lock();
+		reset_sensor_run_state();
+		irq_unlock(key);
 		timer_reset();
-		is_running = false;
 	}
-	
 }
 
 
@@ -199,6 +210,7 @@ uint8_t ReadyEntry(void)
 		tm1637_display_ready(2);
 	}
 	k_timer_start(&fsm_timer, K_SECONDS(120), K_NO_WAIT);
+	reset_sensor_run_state();
 	g_stateMachine.period_ms = FSM_PERIOD_SLOW_MS;
 	return ERR_NONE;
 };
@@ -280,7 +292,7 @@ uint8_t RunningRun(void)
 	irq_unlock(key);
 	//printk("Got timerValue %d\n" , current_timestamp);
 
-	uint64_t uS = current_timestamp * (1000000ULL / TIMER_FREQUENCY_HZ); //timetamp to microseconds (1 step = 8uS)
+	uint64_t uS = current_timestamp * TIMER_TICK_DURATION_US; //timetamp to microseconds (1 step = 8uS)
 	uint8_t digits[4];
 	digits[0] = (uint8_t)(uS / 10000000) % 10; //10sec
 	digits[1] = (uint8_t)(uS / 1000000) % 10; //1sec
@@ -388,14 +400,15 @@ uint8_t SendingEntry(void)
 {
 	uint32_t highest_stamp = g_timestamps[g_timestamp_idx_to_write - 1];
 	printk("Highest timestamp at %d\n", highest_stamp);
-	uint64_t uS = highest_stamp * (1000000ULL / TIMER_FREQUENCY_HZ); //timetamp to microseconds (1 step = 8uS)
+	uint32_t ms = (highest_stamp * TIMER_TICK_DURATION_US) / 1000;
 	uint8_t digits[4];
-	digits[0] = (uint8_t)(uS / 10000000) % 10; //10sec
-	digits[1] = (uint8_t)(uS / 1000000) % 10; //1sec
-	digits[2] = (uint8_t)(uS / 100000) % 10; //100ms
-	digits[3] = (uint8_t)(uS / 10000) % 10; //10ms
+	digits[0] = (ms / 10000) % 10; // 10 s
+	digits[1] = (ms / 1000)  % 10; // 1 s
+	digits[2] = (ms / 100)   % 10; // 100 ms
+	digits[3] = (ms / 10)    % 10; // 10 ms
+	printk("Highest timestamp in digits: %d %d. %d %d\n", digits[0], digits[1], digits[2], digits[3]);
 
-	tm1637_display_digits(digits, 4, 8, 1);
+	tm1637_display_digits(digits, 4, 7, 1);
 	//start a 10s timer
 	k_timer_start(&fsm_timer, K_SECONDS(30), K_NO_WAIT);
 

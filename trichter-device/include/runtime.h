@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 #define TIMER_FREQUENCY_HZ				125000
-#define TIMER_TICK_DURATION_US			1000000 / TIMER_FREQUENCY_HZ
+#define TIMER_TICK_DURATION_US			8
 #define MEARUEMENT_END_TIMEOUT_MS		1000 //TODO Adapt to real values with: max_drinking_time / (TICKS_PER_LTR/2) = max_time_between ticks
 #define TIMER_TIMEOUT_TIMESTAMP_DIFF	TIMER_FREQUENCY_HZ / 1000 * MEARUEMENT_END_TIMEOUT_MS
 
