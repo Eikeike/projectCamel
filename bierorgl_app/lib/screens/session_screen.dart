@@ -8,6 +8,7 @@ import '../services/bluetooth_service.dart';
 import '../services/database_helper.dart';
 import 'package:project_camel/core/constants.dart';
 import '../widgets/selection_list.dart';
+import '../widgets/speed_graph.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? session;
@@ -302,6 +303,19 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                             color: Theme.of(context).colorScheme.onSurface,
                             fontWeight: FontWeight.bold)),
                   ],
+                ),
+              ),
+
+            const SizedBox(height: 24), // Abstand zur Zeit
+
+            // Graph
+            if (widget.allValues != null && widget.allValues!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24.0),
+                child: SessionChart(
+                  allValues: widget.allValues!,
+                  // Wir nutzen hier deinen Calibration-Wert aus dem Konstruktor
+                  volumeCalibrationValue: widget.calibrationFactor ?? 1.0,
                 ),
               ),
             const SizedBox(height: 32),
