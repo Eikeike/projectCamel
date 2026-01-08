@@ -13,3 +13,20 @@ enum SyncStatus {
   final String value;
   const SyncStatus(this.value);
 }
+
+abstract class BleConstants {
+  // UUIDs
+  static const serviceUuid = "af56d6dd-3c39-4d67-9bbe-4fb04fa327cc";
+  static const sessionUuid = "f9d76937-bd70-4e4f-a4da-0b718d5f5b6d";
+  static const calibUuid = "23de2cad-0fc8-49f4-bbcc-5eb2c9fdb91b";
+
+  // Protokoll
+  static const flagStart = 0xAA;
+  static const flagData = 0xBB;
+  static const flagEnd = 0xCC;
+
+  // Header Offsets
+  static const headerSize = 4;
+  static const offsetCount = 4; // Start-Paket Count
+  static const offsetVolFactor = 6; // Start-Paket VolFactor
+}

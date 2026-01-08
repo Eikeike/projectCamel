@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../core/constants.dart';
 
 class TrichterScanState {
   final bool isBluetoothEnabled;
@@ -32,8 +33,6 @@ class TrichterScanState {
 }
 
 class TrichterScannerService extends Notifier<TrichterScanState> {
-  static const String trichterServiceUuid =
-      "af56d6dd-3c39-4d67-9bbe-4fb04fa327cc";
   StreamSubscription? _scanResultsSubscription;
   StreamSubscription? _adapterStateSubscription;
 
@@ -97,7 +96,7 @@ class TrichterScannerService extends Notifier<TrichterScanState> {
       });
 
       await FlutterBluePlus.startScan(
-        withServices: [Guid(trichterServiceUuid)],
+        withServices: [Guid(BleConstants.serviceUuid)],
         timeout: const Duration(seconds: 15),
         androidUsesFineLocation: true,
       );

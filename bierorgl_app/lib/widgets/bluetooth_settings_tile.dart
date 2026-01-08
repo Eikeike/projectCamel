@@ -112,8 +112,8 @@ class BluetoothSettingsTile extends ConsumerWidget {
                               onTap: () async {
                                 final scanNotifier =
                                     ref.read(trichterScanProvider.notifier);
-                                final connectionNotifier =
-                                    ref.read(trichterConnectionProvider.notifier);
+                                final connectionNotifier = ref
+                                    .read(trichterConnectionProvider.notifier);
 
                                 await scanNotifier.stopScan();
 

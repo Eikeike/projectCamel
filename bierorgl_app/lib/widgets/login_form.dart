@@ -13,6 +13,8 @@ class _LoginFormState extends ConsumerState<LoginForm> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  bool _passwordVisible = false; // <-- HIER HINZUGEFÜGT
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -32,7 +34,6 @@ class _LoginFormState extends ConsumerState<LoginForm> {
     }
 
     await ref.read(authControllerProvider.notifier).login(email, password);
-    // Navigation + DB update are handled in LoginScreen/AuthGate.
   }
 
   @override
@@ -51,14 +52,27 @@ class _LoginFormState extends ConsumerState<LoginForm> {
           ),
         ),
         const SizedBox(height: 16),
+
+        /// Passwortfeld mit Toggle
         TextField(
           controller: _passwordController,
-          obscureText: true,
-          decoration: const InputDecoration(
+          obscureText: !_passwordVisible, // <-- hier
+          decoration: InputDecoration(
             labelText: 'Passwort',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _passwordVisible ? Icons.visibility_off : Icons.visibility,
+              ),
+              onPressed: () {
+                setState(() {
+                  _passwordVisible = !_passwordVisible;
+                });
+              },
+            ),
           ),
         ),
+
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
