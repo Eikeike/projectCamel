@@ -9,7 +9,7 @@ import '../services/database_helper.dart';
 import 'package:intl/intl.dart';
 
 import 'session_graph_screen.dart'; // NEU: Import für den Graphen-Screen
-import 'session_screen.dart';
+import 'new_session_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});

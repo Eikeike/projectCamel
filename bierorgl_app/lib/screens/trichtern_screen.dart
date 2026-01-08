@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/trichter_connection_service.dart';
 import '../services/trichter_data_handler.dart';
-import 'session_screen.dart';
+import 'new_session_screen.dart';
 import '../widgets/bluetooth_settings_tile.dart';
 
 class TrichternScreen extends ConsumerStatefulWidget {
