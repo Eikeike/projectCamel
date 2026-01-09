@@ -31,22 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
     const LeaderboardScreen(),
     const ProfileScreen(),
     const DebugScreen(),
-    SessionScreen(
-      durationMS: 4500,
-      calculatedVolumeML: 500,
-      // 200 Impulse entsprechen 0,5L (da wir 200 Zeitstempel im Array haben)
-      calibrationFactor: 200.0,
-      allValues: List.generate(200, (i) {
-        double x = i / 199.0;
-        // Eine Glockenkurve verändert die Dichte der Zeitstempel
-        // Wir nutzen eine Sinus-Verteilung für die Zeitabstände
-        double speedFactor = 1.0 + 1.5 * math.sin(x * 3.14159);
-
-        // Die Zeitstempel rücken in der Mitte näher zusammen
-        return (1000 + (x * 4500 / speedFactor)).toInt();
-      })
-        ..sort(),
-    )
   ];
 
   @override
@@ -104,10 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.bug_report),
               label: 'DEBUG',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.tram_outlined),
-              label: 'Session',
             ),
           ],
         ),

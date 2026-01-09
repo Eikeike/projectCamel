@@ -1,7 +1,22 @@
+import 'package:flutter/material.dart';
+import 'colors.dart'; // Import der neuen Datei
+
 class AppConstants {
   static const apiBaseUrl = 'https://dev.trichter.biertrinkenistgesund.de';
   static const bleDeviceId = 'ABC-123';
-  static const autoSyncDebounceIntervalSeconds = 7; //ja ich weiß geiler name
+  static const autoSyncDebounceIntervalSeconds = 7;
+
+  // --- UI KONFIGURATION ---
+  // Wir definieren die Liste hier, damit sie nicht im UI-Code liegt.
+  // Das macht den SettingsScreen viel schlanker.
+  static const List<Map<String, dynamic>> themeOptions = [
+    {'name': 'Ocean', 'seed': AppColors.ocean},
+    {'name': 'Nature', 'seed': AppColors.nature},
+    {'name': 'Cherry', 'seed': AppColors.cherry},
+    {'name': 'Royal', 'seed': AppColors.royal},
+    {'name': 'Sunset', 'seed': AppColors.sunset},
+    {'name': 'Coffee', 'seed': AppColors.coffee},
+  ];
 }
 
 enum SyncStatus {

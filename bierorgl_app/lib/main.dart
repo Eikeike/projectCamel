@@ -3,14 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/providers.dart';
 import 'package:project_camel/auth/auth_providers.dart';
-import 'package:project_camel/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // WICHTIG: Importieren
 
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/device_selection_screen.dart';
 
+import 'theme/theme_provider.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. SharedPreferences VOR dem App-Start laden
+  final prefs = await SharedPreferences.getInstance();
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -19,7 +24,15 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(
+    ProviderScope(
+      // 2. Hier injizieren wir die geladenen Prefs in unseren Provider
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends ConsumerWidget {
@@ -28,12 +41,33 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(autoSyncControllerProvider);
+    final themeState = ref.watch(themeProvider);
 
     return MaterialApp(
       title: 'Bierorgl App',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.light,
+      debugShowCheckedModeBanner: false,
+
+      // Theme Modus
+      themeMode: themeState.mode,
+
+      // Helles Design
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: themeState.seedColor,
+          brightness: Brightness.light,
+        ),
+      ),
+
+      // Dunkles Design
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: themeState.seedColor,
+          brightness: Brightness.dark,
+        ),
+      ),
+
       home: const AuthGate(),
       routes: {
         '/bluetooth': (context) => const DeviceSelectionScreen(),
