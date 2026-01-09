@@ -7,9 +7,8 @@ import 'package:project_camel/widgets/pie_chart.dart';
 import '../auth/auth_providers.dart';
 import '../services/database_helper.dart';
 
-// SCREEN IMPORTS
-import 'session_graph_screen.dart';
-import 'session_screen.dart';
+import 'session_graph_screen.dart'; // NEU: Import für den Graphen-Screen
+import 'new_session_screen.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {

@@ -116,12 +116,12 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       await _dbService.commitSession(sessionData, _isEditing);
 
       if (mounted) {
-        Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('Erfolgreich gespeichert!'),
               backgroundColor: Colors.green),
         );
+        Navigator.of(context).pop();
       }
     } catch (e) {
       notifier.setSaving(false);
