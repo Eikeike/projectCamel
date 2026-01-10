@@ -6,6 +6,8 @@ import 'trichtern_screen.dart';
 import 'leaderboard_screen.dart';
 import 'profile_screen.dart';
 import 'event_screen.dart';
+import 'new_session_screen.dart';
+import 'dart:math' as math;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -22,8 +24,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   AutoSyncController get autoSyncController => widget.autoSyncController;
-
-
 
   final List<Widget> _screens = [
     const TrichternScreen(),
@@ -56,7 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
             autoSyncController.triggerSync();
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          backgroundColor:
+              Theme.of(context).colorScheme.surfaceContainerHighest,
           selectedItemColor: Theme.of(context).colorScheme.primary,
           unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
           selectedLabelStyle: const TextStyle(
