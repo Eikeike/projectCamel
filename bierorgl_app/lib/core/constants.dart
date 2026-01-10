@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'colors.dart'; // Import der neuen Datei
+import 'color_constants.dart'; // Import der neuen Datei
 
 class AppConstants {
   static const apiBaseUrl = 'https://dev.trichter.biertrinkenistgesund.de';
@@ -10,12 +10,12 @@ class AppConstants {
   // Wir definieren die Liste hier, damit sie nicht im UI-Code liegt.
   // Das macht den SettingsScreen viel schlanker.
   static const List<Map<String, dynamic>> themeOptions = [
-    {'name': 'Ocean', 'seed': AppColors.ocean},
-    {'name': 'Nature', 'seed': AppColors.nature},
-    {'name': 'Cherry', 'seed': AppColors.cherry},
-    {'name': 'Royal', 'seed': AppColors.royal},
-    {'name': 'Sunset', 'seed': AppColors.sunset},
-    {'name': 'Coffee', 'seed': AppColors.coffee},
+    {'name': 'Ocean', 'seed': AppColorConstants.ocean},
+    {'name': 'Nature', 'seed': AppColorConstants.nature},
+    {'name': 'Cherry', 'seed': AppColorConstants.cherry},
+    {'name': 'Royal', 'seed': AppColorConstants.royal},
+    {'name': 'Sunset', 'seed': AppColorConstants.sunset},
+    {'name': 'Coffee', 'seed': AppColorConstants.coffee},
   ];
 }
 

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
-import '../core/colors.dart';
+import '../core/color_constants.dart'; // Oder wo auch immer deine AppColors sind
 import '../theme/theme_provider.dart';
-// import '../services/auto_sync_controller.dart'; // Ggf. einkommentieren wenn nötig
-// import '../auth/application/auth_providers.dart'; // Ggf. einkommentieren wenn nötig
+// import '../services/auto_sync_controller.dart'; // Einkommentieren wenn nötig
+// import '../auth/application/auth_providers.dart'; // Einkommentieren wenn nötig
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -18,8 +18,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _easterEggTapCount = 0;
   bool _isSecretMenuVisible = false; // Wird true nach 7 Klicks
 
-  // Platzhalter-Werte für die UI-Status der geheimen Schalter
-  bool _tempLegacyMode = false;
+  // Platzhalter für Biermodus (lokal, da noch kein Provider existiert)
   bool _tempBeerMode = false;
 
   void _handleVersionTap() {
@@ -61,7 +60,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
-          duration: Duration(seconds: 3),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -221,12 +220,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 32),
               Row(
                 children: [
+                  // Kleines Icon dazu für den "Developer Look"
+                  Icon(Icons.build_circle_outlined,
+                      color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
                   Text(
                     'Geheime Optionen',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary, // Dev Farbe
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ],
@@ -234,8 +237,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
+                  // Wir nehmen primaryContainer, aber mit leichter Transparenz
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withOpacity(0.5),
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.2)),
                 ),
                 child: Column(
                   children: [
@@ -244,15 +256,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       title: const Text('Legacy Farbtheme'),
                       subtitle: const Text(
                           'Setzt das Farbthema auf die Farben der Alpha-Version zurück.'),
-                      activeThumbColor: Theme.of(context).colorScheme.primary,
+                      activeColor: Theme.of(context).colorScheme.primary,
                       secondary: Icon(Icons.history,
                           color: Theme.of(context).colorScheme.primary),
-                      value: _tempLegacyMode,
+
+                      // ECHTER WERT AUS DEM PROVIDER
+                      value: themeState.isLegacyMode,
+
                       onChanged: (val) {
-                        setState(() => _tempLegacyMode = val);
-                        debugPrint("Legacy Mode: $val (Platzhalter)");
+                        // 1. Theme ändern (löst kompletten Rebuild aus)
+                        ref.read(themeProvider.notifier).setLegacyMode(val);
+                        debugPrint("Legacy Mode gesetzt auf: $val");
+
+                        // 2. CRASH-FIX: Warten bis Build fertig, dann SnackBar
+                        if (val) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                      "Zurück in die Zukunft... oder Vergangenheit? 🕰️"),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          });
+                        }
                       },
                     ),
+
+                    // DIVIDER: Angepasst für farbigen Hintergrund
                     Divider(
                         height: 1,
                         indent: 16,
@@ -261,12 +294,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             .colorScheme
                             .onPrimaryContainer
                             .withOpacity(0.2)),
+
                     // SLIDER 2: Biermodus
                     SwitchListTile(
                       title: const Text('Biermodus'),
                       subtitle: const Text(
                           'Verändert die Strings auf der 7-Segment-Anzeige des Gerätes.'),
-                      activeThumbColor: Theme.of(context).colorScheme.primary,
+                      activeColor: Theme.of(context).colorScheme.primary,
                       secondary: Icon(Icons.sports_bar,
                           color: Theme.of(context).colorScheme.primary),
                       value: _tempBeerMode,
@@ -285,7 +319,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
 
             // ================================================================
-            // 4. INFO (Hier ist der Trigger!)
+            // 4. INFO
             // ================================================================
             const SizedBox(height: 32),
             const Text(
@@ -421,7 +455,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.errorContainer),
+                backgroundColor: Theme.of(context).colorScheme.error),
             onPressed: () {
               Navigator.pop(context);
               debugPrint("User will Konto löschen");
@@ -433,7 +467,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  // --- VORSCHAU WIDGET (Unverändert) ---
+  // --- VORSCHAU WIDGET (CRASH FIX: Material statt Scaffold) ---
   Widget _buildRealM3Preview({
     required BuildContext context,
     required String name,
@@ -478,9 +512,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(9),
-                child: Scaffold(
-                  backgroundColor: previewScheme.surface,
-                  body: Column(
+                // WICHTIG: Hier nehmen wir Material statt Scaffold!
+                // Das ist performanter und verhindert den Crash beim globalen Theme-Wechsel.
+                child: Material(
+                  color: previewScheme.surface,
+                  child: Column(
                     children: [
                       Container(
                         height: 32,
