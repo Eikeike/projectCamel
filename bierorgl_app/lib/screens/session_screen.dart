@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 import '../services/bluetooth_service.dart';
 import '../services/database_helper.dart';
 import 'package:project_camel/core/constants.dart';
+import '../widgets/selection_list.dart';
+import '../widgets/speed_graph.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic>? session;
@@ -270,13 +272,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F0),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: Text(
             _isEditing ? 'Trichterung Bearbeiten' : 'Ergebnis speichern',
             style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFFFF9500),
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         automaticallyImplyLeading: true,
       ),
       body: SingleChildScrollView(
@@ -290,76 +292,82 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   children: [
                     Text(
                       '${((widget.durationMS ?? 0) / 1000).toStringAsFixed(2)}s',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 72,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFFFF9500)),
+                          color: Theme.of(context).colorScheme.primary),
                     ),
-                    const Text('ENDZEIT',
+                    Text('ENDZEIT',
                         style: TextStyle(
                             letterSpacing: 2,
-                            color: Colors.grey,
+                            color: Theme.of(context).colorScheme.onSurface,
                             fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
+
+            const SizedBox(height: 24), // Abstand zur Zeit
+
+            // Graph
+            if (widget.allValues != null && widget.allValues!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24.0),
+                child: SessionChart(
+                  allValues: widget.allValues!,
+                  // Wir nutzen hier deinen Calibration-Wert aus dem Konstruktor
+                  volumeCalibrationValue: widget.calibrationFactor ?? 1.0,
+                ),
+              ),
             const SizedBox(height: 32),
-            const Text('Wer hat getrichtert? *',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _selectedUserID,
-                    hint: const Text('User wählen'),
-                    items: _users
-                        .map((u) => DropdownMenuItem(
-                              value: u['userID'] as String,
-                              child: Text(u['username'] ??
-                                  u['name'] ??
-                                  'Unbekannter User'),
-                            ))
-                        .toList(),
-                    onChanged: (val) => setState(() => _selectedUserID = val),
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        fillColor: Colors.white,
-                        filled: true),
-                  ),
-                )
-              ],
+            UserSelectionField(
+              users: _users,
+              selectedUserID: _selectedUserID,
+              onChanged: (val) {
+                if (val != null) setState(() => _selectedUserID = val);
+              },
+              onAddGuest: _addGuestUser,
             ),
-            const SizedBox(height: 20),
-            const Text('Titel der Trichterung',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
+// Linksbündiges Label im M3-Stil
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8.0, left: 4),
+              child: Text(
+                'Titel der Trichterung',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+              ),
+            ),
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  fillColor: Colors.white,
-                  filled: true),
+              style: Theme.of(context).textTheme.bodyLarge,
+              decoration: InputDecoration(
+                filled: true,
+                // Nutzt die dezente Hintergrundfarbe von Material 3
+                fillColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                // Weiche Rundungen ohne Rahmenlinie
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                // Blauer (Primary) Rahmen nur, wenn das Feld aktiv ist
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1.5,
+                  ),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                hintText: 'Name eingeben...',
+              ),
             ),
-            const SizedBox(height: 20),
-            const Text('Event', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              isExpanded: true,
-              value: _selectedEventID,
-              hint: const Text('Optional: Event zuordnen'),
-              items: _events
-                  .map((e) => DropdownMenuItem(
-                        value: e['eventID'] as String,
-                        child: Text(e['name'] ?? 'Event'),
-                      ))
-                  .toList(),
+            EventSelectionField(
+              events: _events,
+              selectedEventID: _selectedEventID,
               onChanged: (val) => setState(() => _selectedEventID = val),
-              decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  fillColor: Colors.white,
-                  filled: true),
             ),
             const SizedBox(height: 20),
             const Text('Volumen',
@@ -374,7 +382,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   child: Text(
                     'Messung: ${widget.calculatedVolumeML} ml',
                     style: TextStyle(
-                        color: Colors.grey[600], fontStyle: FontStyle.italic),
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontStyle: FontStyle.italic),
                   ),
                 ),
               ),
@@ -400,7 +409,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               child: ElevatedButton(
                 onPressed: _isSaving ? null : _processSave,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF9500),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
@@ -420,9 +429,10 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             Center(
               child: TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('VERWERFEN',
+                child: Text('VERWERFEN',
                     style: TextStyle(
-                        color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -447,9 +457,11 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
           setState(() => _selectedVolumeML = ml);
         }
       },
-      selectedColor: const Color(0xFFFF9500),
+      selectedColor: Theme.of(context).colorScheme.primary,
       labelStyle: TextStyle(
-          color: (isSelected || isCustomActive) ? Colors.white : Colors.black),
+          color: (isSelected || isCustomActive)
+              ? Theme.of(context).colorScheme.onPrimary
+              : Theme.of(context).colorScheme.onSurface),
     );
   }
 

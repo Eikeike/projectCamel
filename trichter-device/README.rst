@@ -62,8 +62,13 @@ Um den bootloader zu builden: In den ordner: **zephyrproject/bootloader/mcuboot/
 
 	cmake -GNinja -DBOARD=pilsPlatine -DBOARD_ROOT=<Absolute_path_to>\\applications\\projectCamel\\trichter-device -DAPPL_CONF_DIR=<Absolute_path_to>\\zephyrproject\\applications\\projectCamel\\trichter-device\\conf\\mcuboot\\  -S . -B .\\build -DCONF_FILE=".\\prj.conf"
 
+Und danach 
+
+::
+
+	ninja -Cbuild
+
 Das erzeugte \*.elf oder \*.hex file in ./build/zephyr kann dann auf die MCU geflashed werden.
-TODO: Bootloader update über serial Recovery
 
 Der Bootloader nutzt Serial Recovery - sobald er geflashed ist, kann über den USB-C port neue Software geflashed werden.
 Dafür muss zunächst die Applikation gebaut werden:

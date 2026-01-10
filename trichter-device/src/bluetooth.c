@@ -19,8 +19,9 @@
 #define MAX_SDU_SIZE_BYTE       243 //247 MTU - 4 byte header
 #define COUNT_BYTES(num)        (num * sizeof(uint32_t))
 
-static bool g_is_advertising = 0;
-static bool g_is_connected = 0;
+static bool g_is_advertising = false;
+static bool g_is_connected = false;
+static bool g_restart_adv = false;
 
 static uint8_t g_timer_tick_duration = 0;
 
@@ -189,6 +190,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
         return;
     }
     ble_stop_adv();
+    g_restart_adv = false;
     g_is_connected = 1;
     g_bulk_service.current_conn = bt_conn_ref(conn);
 }
@@ -207,13 +209,18 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
     printk("Disconnected (reason 0x%02x)\n", reason);
     g_is_connected = 0;
     bt_conn_unref(g_bulk_service.current_conn);
+    g_restart_adv = true;
 }
 
 
 static void recycled()
 {
-    printk("Recycled; starting advertising");
-    ble_start_adv();
+    printk("Recycled; %s starting advertising", g_restart_adv ? "" : "NOT");
+    if (g_restart_adv)
+    {
+        ble_start_adv();
+        g_restart_adv = true;
+    }
 }
 
 
@@ -404,20 +411,20 @@ int ble_send_chunk()
     int err;
 
     struct ble_packet_header header;
-    const uint16_t next_idx = g_bulk_service.idx_to_send;
+    const uint16_t next_byte_idx = g_bulk_service.idx_to_send;
     uint16_t tx_length = 0;
-    if (next_idx < COUNT_BYTES(g_bulk_service.count))
+    if (next_byte_idx < COUNT_BYTES(g_bulk_service.count))
     {
         header.flag = TX_FLAG_DATA;
-        header.chunk_index = next_idx / g_bulk_service.sdu_size; //intentional integer division
+        header.chunk_index = next_byte_idx / g_bulk_service.sdu_size; //intentional integer division
         header.data_size_bytes = MIN(g_bulk_service.sdu_size, (COUNT_BYTES(g_bulk_service.count) - g_bulk_service.idx_to_send));
-        printk("sending index %d with next idx = %d, header size = %d and data size = %d\n", header.chunk_index, next_idx, sizeof(header), header.data_size_bytes);
+        printk("sending index %d with next idx = %d, header size = %d and data size = %d\n", header.chunk_index, next_byte_idx, sizeof(header), header.data_size_bytes);
        tx_length = sizeof(header) + header.data_size_bytes;
 
         if (header.data_size_bytes <= (sizeof(tx_buffer)/sizeof(tx_buffer[0])))
         {
             memcpy(tx_buffer, &header, sizeof(header));
-            memcpy(tx_buffer + sizeof(header), &g_bulk_service.timestamp_bytes[next_idx], header.data_size_bytes);
+            memcpy(tx_buffer + sizeof(header), &g_bulk_service.timestamp_bytes[next_byte_idx], header.data_size_bytes);
         }
 
     } else {
@@ -440,7 +447,7 @@ int ble_send_chunk()
     if (err)
     {
         k_sem_give(&indication_sem);
-        printk("Failed to indicate in send_chunk for chunk %d", next_idx);
+        printk("Failed to indicate in send_chunk for chunk %d", next_byte_idx);
         return err;
     }
     g_bulk_service.idx_to_send += g_bulk_service.sdu_size;
