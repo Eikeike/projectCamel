@@ -1,14 +1,12 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:project_camel/models/session.dart';
+import 'package:project_camel/models/event.dart';
 import 'package:project_camel/providers.dart';
+import 'package:project_camel/screens/session_screen.dart';
 import 'package:project_camel/widgets/pie_chart.dart';
+import 'package:project_camel/widgets/session_list.dart';
 import '../auth/auth_providers.dart';
-import '../services/database_helper.dart';
-
-import 'session_graph_screen.dart'; // NEU: Import für den Graphen-Screen
-import 'new_session_screen.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -22,116 +20,97 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ===========================================================================
   // 1. STATE & VARIABLES
   // ===========================================================================
-  final DatabaseHelper _dbHelper = DatabaseHelper();
-  String selectedVolumeLabel = 'Alle';
 
   int? get selectedVolumeML {
-    if (selectedVolumeLabel == '0,33 L') return 330;
-    if (selectedVolumeLabel == '0,5 L') return 500;
-    return null;
+    switch (ref.watch(volumeFilterProvider)) {
+      case VolumeFilter.koelsch:
+        return 200;
+      case VolumeFilter.l033:
+        return 330;
+      case VolumeFilter.l05:
+        return 500;
+      case VolumeFilter.all:
+        return null;
+    }
+  }
+
+  final _scrollController = ScrollController();
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   // ===========================================================================
   // 2. LOGIC & ACTIONS
   // ===========================================================================
 
-  Future<void> _reloadData() async {
-    setState(() {});
-  }
+  // void _showGraph(Map<String, dynamic> session) {
+  //   final String? valuesJson = session['valuesJSON'] as String?;
+  //   final num? rawVolumeFactor = session['calibrationFactor'] as num?;
+  //   final int? volumeCalibrationFactor = rawVolumeFactor?.toInt();
 
-  void _navigateToSettings() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const SettingsScreen()),
-    ).then((_) {
-      _reloadData();
-    });
-  }
+  //   final List<dynamic> allValues =
+  //       valuesJson != null ? jsonDecode(valuesJson) : [];
+  //   final List<dynamic> graphValues =
+  //       allValues.length > 1 ? allValues.sublist(1) : [];
+  //   final String graphValuesJson = jsonEncode(graphValues);
 
-  void _showGraph(Map<String, dynamic> session) {
-    final String? valuesJson = session['valuesJSON'] as String?;
-    final num? rawVolumeFactor = session['calibrationFactor'] as num?;
-    final int? volumeCalibrationFactor = rawVolumeFactor?.toInt();
+  //   if (valuesJson != null && volumeCalibrationFactor != null) {
+  //     showGeneralDialog(
+  //       context: context,
+  //       barrierDismissible: true,
+  //       barrierLabel: 'Graph',
+  //       transitionDuration: const Duration(milliseconds: 400),
+  //       pageBuilder: (context, anim1, anim2) => Container(),
+  //       transitionBuilder: (context, anim1, anim2, child) {
+  //         return ScaleTransition(
+  //           scale: anim1,
+  //           child: Padding(
+  //             padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 20),
+  //             child: SessionGraphScreen(
+  //               valuesJson: graphValuesJson,
+  //               volumeCalibrationValue: volumeCalibrationFactor,
+  //             ),
+  //           ),
+  //         );
+  //       },
+  //     );
+  //   } else {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //           content: Text('Keine Graphendaten für diese Session verfügbar.'),
+  //           backgroundColor: Colors.amber),
+  //     );
+  //   }
+  // }
 
-    final List<dynamic> allValues =
-        valuesJson != null ? jsonDecode(valuesJson) : [];
-    final List<dynamic> graphValues =
-        allValues.length > 1 ? allValues.sublist(1) : [];
-    final String graphValuesJson = jsonEncode(graphValues);
+  // void _confirmDeleteSession(Session session) {
+  //   final sessionName = session.name ?? 'diese Session';
+  //   final sessionID = session.id;
 
-    if (valuesJson != null && volumeCalibrationFactor != null) {
-      showGeneralDialog(
-        context: context,
-        barrierDismissible: true,
-        barrierLabel: 'Graph',
-        transitionDuration: const Duration(milliseconds: 400),
-        pageBuilder: (context, anim1, anim2) => Container(),
-        transitionBuilder: (context, anim1, anim2, child) {
-          return ScaleTransition(
-            scale: anim1,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 20),
-              child: SessionGraphScreen(
-                valuesJson: graphValuesJson,
-                volumeCalibrationValue: volumeCalibrationFactor,
-              ),
-            ),
-          );
-        },
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Keine Graphendaten für diese Session verfügbar.'),
-            backgroundColor: Colors.amber),
-      );
-    }
-  }
-
-  void _confirmDeleteSession(Map<String, dynamic> session) {
-    final sessionName = session['name'] as String? ?? 'diese Session';
-    final sessionID = session['sessionID'] as String;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Session löschen?'),
-        content: Text('Möchtest du "$sessionName" wirklich löschen?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Abbrechen')),
-          TextButton(
-            onPressed: () async {
-              await _dbHelper.markSessionAsDeleted(sessionID);
-              if (mounted) Navigator.pop(context);
-              _reloadData();
-            },
-            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<Map<String, dynamic>> _loadAllProfileData() async {
-    final uid = await _dbHelper.getLoggedInUserID();
-    if (uid == null) {
-      return {'user': null};
-    }
-
-    final user = await _dbHelper.getUserByID(uid);
-    final sessions = await _dbHelper.getUserStats(uid);
-    final history = await _dbHelper.getHistory(uid);
-    final mostEvent = await _dbHelper.getMostFrequentEvent(uid);
-
-    return {
-      'user': user,
-      'sessions': sessions,
-      'history': history,
-      'mostEvent': mostEvent,
-    };
-  }
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: const Text('Session löschen?'),
+  //       content: Text('Möchtest du "$sessionName" wirklich löschen?'),
+  //       actions: [
+  //         TextButton(
+  //             onPressed: () => Navigator.pop(context),
+  //             child: const Text('Abbrechen')),
+  //         TextButton(
+  //           onPressed: () async {
+  //             await ref
+  //                 .read(sessionRepositoryProvider)
+  //                 .markSessionAsDeleted(sessionID);
+  //             if (mounted) Navigator.pop(context);
+  //           },
+  //           child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   // ===========================================================================
   // 3. UI BUILD METHOD
@@ -139,137 +118,159 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authControllerProvider);
+    if (authState.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final userId = authState.userId!;
+    final userAsync = ref.watch(userByIdProvider(userId));
+    final userSessionsAsync = ref.watch(sessionsByUserIDProvider(userId));
+    final userTopEvents = ref.watch(topEventsByUserProvider(userId));
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
-        child: FutureBuilder<Map<String, dynamic>>(
-          future: _loadAllProfileData(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Center(
+        child: userAsync.when(
+          loading: () => Center(
+            child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary),
+          ),
+          error: (e, _) => Center(child: Text('Fehler: $e')),
+          data: (user) {
+            if (user == null) return _buildNoUserUI();
+
+            // Render sessions only when they are ready to avoid flicker and fake empties
+            return userSessionsAsync.when(
+              loading: () => Center(
                 child: CircularProgressIndicator(
                     color: Theme.of(context).colorScheme.primary),
-              );
-            }
+              ),
+              error: (e, _) =>
+                  Center(child: Text('Fehler beim Laden der Historie: $e')),
+              data: (allSessions) {
+                // top events are optional — use .asData to avoid blocking the UI
+                final List<EventStats>? topEvents = userTopEvents.asData?.value;
+                final EventStats? mostFrequentEvent =
+                    (topEvents != null && topEvents.isNotEmpty)
+                        ? topEvents.first
+                        : null;
 
-            if (!snapshot.hasData || snapshot.data!['user'] == null) {
-              return _buildNoUserUI();
-            }
+                // --- FILTERUNG ---
+                List<Session> filteredSessions = allSessions;
+                if (selectedVolumeML != null) {
+                  filteredSessions = allSessions
+                      .where((s) => s.volumeML == selectedVolumeML)
+                      .toList();
+                }
 
-            // --- DATEN EXTRAHIEREN ---
-            final data = snapshot.data!;
-            final user = data['user'] as Map<String, dynamic>;
-            final allSessions =
-                List<Map<String, dynamic>>.from(data['sessions'] ?? []);
-            final history =
-                List<Map<String, dynamic>>.from(data['history'] ?? []);
-            final mostFrequentEvent =
-                data['mostEvent'] as Map<String, dynamic>?;
+                // --- BERECHNUNGEN ---
+                int totalCount = filteredSessions.length;
+                double totalVolumeL = filteredSessions.fold(
+                    0.0, (sum, s) => sum + s.volumeLiters);
 
-            // --- FILTERUNG ---
-            List<Map<String, dynamic>> filteredSessions = allSessions;
-            if (selectedVolumeML != null) {
-              filteredSessions = allSessions
-                  .where((s) => s['volumeML'] == selectedVolumeML)
-                  .toList();
-            }
+                String fastestTime = "0.00s";
+                if (filteredSessions.isNotEmpty) {
+                  int minMS = filteredSessions
+                      .map((s) => s.durationMS)
+                      .reduce((a, b) => (a != 0 && a < b) ? a : b);
+                  fastestTime = "${(minMS / 1000).toStringAsFixed(2)} s";
+                }
 
-            // --- BERECHNUNGEN ---
-            int totalCount = filteredSessions.length;
-            double totalVolumeL = allSessions.fold(
-                0.0, (sum, s) => sum + ((s['volumeML'] as int? ?? 0) / 1000.0));
+                String avgTime = "N/A";
+                if (filteredSessions.isNotEmpty &&
+                    ref.watch(volumeFilterProvider) != VolumeFilter.all) {
+                  double avgMS = filteredSessions
+                          .map((s) => s.durationMS)
+                          .reduce((a, b) => a + b) /
+                      filteredSessions.length;
+                  avgTime = "${(avgMS / 1000).toStringAsFixed(2)} s";
+                }
 
-            String fastestTime = "0.00s";
-            if (filteredSessions.isNotEmpty) {
-              int minMS = filteredSessions
-                  .map((s) => s['durationMS'] as int? ?? 0)
-                  .reduce((a, b) => (a != 0 && a < b) ? a : b);
-              fastestTime = "${(minMS / 1000).toStringAsFixed(2)} s";
-            }
+                return SingleChildScrollView(
+                  controller: _scrollController,
 
-            String avgTime = "N/A";
-            if (filteredSessions.isNotEmpty && selectedVolumeLabel != 'Alle') {
-              double avgMS = filteredSessions
-                      .map((s) => s['durationMS'] as int? ?? 0)
-                      .reduce((a, b) => a + b) /
-                  filteredSessions.length;
-              avgTime = "${(avgMS / 1000).toStringAsFixed(2)} s";
-            }
-
-            return SingleChildScrollView(
-              // Padding angepasst: Oben weniger (10), da der Button Platz braucht
-              padding: const EdgeInsets.only(
-                  left: 20, right: 20, top: 10, bottom: 20),
-              child: Column(
-                children: [
-                  // -----------------------------------------------------------
-                  // SETTINGS BUTTON (Scrollt jetzt mit!)
-                  // -----------------------------------------------------------
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      onPressed: _navigateToSettings,
-                      icon: const Icon(Icons.settings),
-                      tooltip: 'Einstellungen',
-                    ),
-                  ),
-
-                  // -----------------------------------------------------------
-                  // PROFIL INHALT
-                  // -----------------------------------------------------------
-                  _buildAvatar(user['name']?.toString().isNotEmpty == true
-                      ? user['name'][0]
-                      : (user['firstname']?.toString().isNotEmpty == true
-                          ? user['firstname'][0]
-                          : 'U')),
-                  const SizedBox(height: 16),
-                  Text(
-                    user['name'] ?? user['firstname'] ?? 'Unbekannt',
-                    style: const TextStyle(
-                        fontSize: 28, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    '@${user['username'] ?? 'user'}',
-                    style: TextStyle(
-                        fontSize: 16,
-                        color: Theme.of(context).colorScheme.onSurface),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Filter Chips
-                  _buildFilterHeader(),
-                  Row(
+                  // Padding angepasst: Oben weniger (10), da der Button Platz braucht
+                  padding: const EdgeInsets.only(
+                      left: 20, right: 20, top: 10, bottom: 20),
+                  child: Column(
                     children: [
-                      _buildVolumeChip('Alle'),
-                      const SizedBox(width: 12),
-                      _buildVolumeChip('Kölsch'),
-                      const SizedBox(width: 12),
-                      _buildVolumeChip('0,33 L'),
-                      const SizedBox(width: 12),
-                      _buildVolumeChip('0,5 L'),
+                      // -----------------------------------------------------------
+                      // SETTINGS BUTTON (Scrollt jetzt mit!)
+                      // -----------------------------------------------------------
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const SettingsScreen()),
+                            );
+                          },
+                          icon: const Icon(Icons.settings),
+                          tooltip: 'Einstellungen',
+                        ),
+                      ),
+
+                      // -----------------------------------------------------------
+                      // PROFIL INHALT
+                      // -----------------------------------------------------------
+                      _buildAvatar(user['name']?.toString().isNotEmpty == true
+                          ? user['name'][0]
+                          : (user['firstname']?.toString().isNotEmpty == true
+                              ? user['firstname'][0]
+                              : 'U')),
+                      const SizedBox(height: 16),
+                      Text(
+                        user['name'] ?? user['firstname'] ?? 'Unbekannt',
+                        style: const TextStyle(
+                            fontSize: 28, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '@${user['username'] ?? 'user'}',
+                        style: TextStyle(
+                            fontSize: 16,
+                            color: Theme.of(context).colorScheme.onSurface),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Filter Chips
+                      _buildFilterHeader(),
+                      Row(
+                        children: [
+                          _buildVolumeChip('Alle', VolumeFilter.all),
+                          const SizedBox(width: 12),
+                          _buildVolumeChip('Kölsch', VolumeFilter.koelsch),
+                          const SizedBox(width: 12),
+                          _buildVolumeChip('0,33 L', VolumeFilter.l033),
+                          const SizedBox(width: 12),
+                          _buildVolumeChip('0,5 L', VolumeFilter.l05),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Statistiken Grid
+                      _buildStatsGrid(
+                          totalCount, fastestTime, avgTime, totalVolumeL),
+                      const SizedBox(height: 24),
+
+                      // Kuchendiagramm
+                      _buildPieChartCard(),
+                      const SizedBox(height: 24),
+
+                      // Meistgetrichtert Event
+                      _buildMostEventCard(mostFrequentEvent),
+                      const SizedBox(height: 24),
+
+                      _buildSessionHistory(AsyncValue.data(allSessions)),
+
+                      const SizedBox(height: 40),
                     ],
                   ),
-                  const SizedBox(height: 24),
-
-                  // Statistiken Grid
-                  _buildStatsGrid(
-                      totalCount, fastestTime, avgTime, totalVolumeL),
-                  const SizedBox(height: 24),
-
-                  // Kuchendiagramm
-                  _buildPieChartCard(),
-                  const SizedBox(height: 24),
-
-                  // Meistgetrichtert Event
-                  _buildMostEventCard(mostFrequentEvent),
-                  const SizedBox(height: 24),
-
-                  // Verlauf Liste
-                  _buildHistoryCard(history),
-
-                  const SizedBox(height: 40),
-                ],
-              ),
+                );
+              },
             );
           },
         ),
@@ -341,17 +342,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ---------------------------------------------------------------------------
   Widget _buildFilterHeader() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.only(top: 16, bottom: 10),
       decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(16)),
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Icon(Icons.water_drop,
-              size: 20, color: Theme.of(context).colorScheme.primary),
-          const Text(' Filter nach Volumen',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              size: 18, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Filter nach Volumen',
+            style: TextStyle(
+              fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
+              //fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
         ],
       ),
     );
@@ -360,11 +370,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ---------------------------------------------------------------------------
   // Einzelner Filter-Chip (z.B. "0,33 L")
   // ---------------------------------------------------------------------------
-  Widget _buildVolumeChip(String label) {
-    bool isSelected = selectedVolumeLabel == label;
+  Widget _buildVolumeChip(String text, VolumeFilter label) {
+    final isSelected = ref.watch(volumeFilterProvider) == label;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => selectedVolumeLabel = label),
+        onTap: () => ref.read(volumeFilterProvider.notifier).setFilter(label),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
@@ -377,7 +387,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.surfaceContainer),
           ),
-          child: Text(label,
+          child: Text(text,
               textAlign: TextAlign.center,
               style: TextStyle(
                   fontSize: 14,
@@ -520,10 +530,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(
-            height: 220,
+          const SizedBox(
+            height: 220, // adjust as you like
             width: double.infinity,
-            child: const PieChartSample2(),
+            child: PieChartSample2(),
           ),
         ],
       ),
@@ -533,7 +543,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ---------------------------------------------------------------------------
   // Karte für das häufigste Event
   // ---------------------------------------------------------------------------
-  Widget _buildMostEventCard(Map<String, dynamic>? mostEvent) {
+  Widget _buildMostEventCard(EventStats? mostEvent) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -554,11 +564,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(mostEvent['name'] ?? 'Event',
+                      Text(mostEvent.eventName,
                           style: const TextStyle(
                               fontSize: 15, fontWeight: FontWeight.w500)),
                       Text(
-                          'Gesamt: ${((mostEvent['totalVol'] ?? 0) / 1000).toStringAsFixed(1)}L',
+                          'Gesamt: ${(mostEvent.totalVolumeL).toStringAsFixed(1)}L',
                           style: TextStyle(
                               fontSize: 13,
                               color: Theme.of(context)
@@ -573,7 +583,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.primary,
                       borderRadius: BorderRadius.circular(12)),
-                  child: Text('${mostEvent['count']}x',
+                  child: Text('${mostEvent.sessionCount}x',
                       style: TextStyle(
                           color: Theme.of(context).colorScheme.onPrimary,
                           fontWeight: FontWeight.bold,
@@ -590,135 +600,100 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Container für die Verlaufs-Liste
-  // ---------------------------------------------------------------------------
-  Widget _buildHistoryCard(List<Map<String, dynamic>> history) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Verlauf',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          if (history.isEmpty)
-            Text('Keine Sessions in der Historie',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant))
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: history.length,
-              separatorBuilder: (context, index) => const Divider(height: 24),
-              itemBuilder: (context, index) {
-                final s = history[index];
-                double volL = (s['volumeML'] as int? ?? 0) / 1000.0;
-                double timeS = (s['durationMS'] as int? ?? 1) / 1000.0;
-                double flow = volL / timeS;
+  //               String dateStr = "Unbekannt";
+  //               try {
+  //                 dateStr = DateFormat('dd.MM.yyyy')
+  //                     .format(DateTime.parse(s['startedAt']));
+  //               } catch (_) {}
 
-                String dateStr = "Unbekannt";
-                try {
-                  dateStr = DateFormat('dd.MM.yyyy')
-                      .format(DateTime.parse(s['startedAt']));
-                } catch (_) {}
+  //               return _buildHistoryItem(
+  //                 session: s,
+  //                 date: dateStr,
+  //                 event: s['eventName'] ?? 'Privat',
+  //                 time: '${timeS.toStringAsFixed(2)}s',
+  //                 volume: '${volL.toStringAsFixed(2)}L',
+  //                 flow: '${flow.toStringAsFixed(3)} L/s',
+  //               );
+  //             },
+  //           ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-                return _buildHistoryItem(
-                  session: s,
-                  date: dateStr,
-                  event: s['eventName'] ?? 'Privat',
-                  time: '${timeS.toStringAsFixed(2)}s',
-                  volume: '${volL.toStringAsFixed(2)}L',
-                  flow: '${flow.toStringAsFixed(3)} L/s',
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
+//   Widget _buildHistoryItem(Session session) {
+//   return SessionListTile(
+//     session: session,
+//     onEdit: () {
+//       Navigator.push(
+//         context,
+//         MaterialPageRoute(
+//           builder: (_) => SessionScreen()//(session: session),
+//         ),
+//       ).then((_) => _reloadData());
+//     },
+//     onDelete: () => _confirmDeleteSession(session),
+//     onShowGraph: () => _showGraph(session),
+//   );
+// }
 
-  // ---------------------------------------------------------------------------
-  // Ein einzelner Eintrag in der Verlaufs-Liste (Zeile)
-  // ---------------------------------------------------------------------------
-  Widget _buildHistoryItem({
-    required Map<String, dynamic> session,
-    required String date,
-    required String event,
-    required String time,
-    required String volume,
-    required String flow,
-  }) {
+  Widget _buildSessionHistory(AsyncValue<List<Session>> allSessionsAsync) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.calendar_today,
-                size: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Text(date,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            const SizedBox(width: 16),
-            Expanded(
-                child: Text(event,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w500),
-                    overflow: TextOverflow.ellipsis)),
-            Text(volume,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            PopupMenuButton<String>(
-              onSelected: (val) {
-                if (val == 'edit') {
+        SizedBox(
+          width: double.infinity,
+          child: Text(
+            'Verlauf',
+            style: TextStyle(
+              fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Content from provider
+        allSessionsAsync.when(
+          loading: () => SizedBox(
+            width: double.infinity,
+            child: Center(
+              child: CircularProgressIndicator(color: cs.primary),
+            ),
+          ),
+          error: (err, stack) => Text(
+            'Fehler beim Laden der Historie',
+            style: TextStyle(color: cs.error),
+          ),
+          data: (sessions) {
+            if (sessions.isEmpty) {
+              return Text(
+                'Keine Sessions in der Historie',
+                style: TextStyle(color: cs.onSurfaceVariant),
+              );
+            }
+
+            // Just your list, full width, no extra card styling
+            return SizedBox(
+              width: double.infinity,
+              child: SessionList(
+                key: const PageStorageKey('sessionsByUserList'),
+                sessions: sessions,
+                embedded: true, // important so it plays nice in the Column
+                onSessionTap: (session) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => SessionScreen(session: session)),
-                  ).then((_) => _reloadData());
-                } else if (val == 'delete') {
-                  _confirmDeleteSession(session);
-                } else if (val == 'show_graph') {
-                  _showGraph(session);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'edit', child: Text('Bearbeiten')),
-                const PopupMenuItem(
-                    value: 'show_graph', child: Text('Graph anzeigen')),
-                const PopupMenuItem(
-                    value: 'delete',
-                    child:
-                        Text('Löschen', style: TextStyle(color: Colors.red))),
-              ],
-              icon: const Icon(Icons.more_vert, size: 20.0),
-              padding: EdgeInsets.zero,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(time,
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: Theme.of(context).colorScheme.primary)),
-            Text(flow,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ],
+                      builder: (_) => (SessionScreen(
+                          session: session)), // or SessionDetailsScreen
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         ),
       ],
     );

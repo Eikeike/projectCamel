@@ -38,7 +38,7 @@ class NewEventScreen extends ConsumerWidget {
             child: FractionallySizedBox(
               heightFactor: 0.8,
               child: Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
