@@ -181,7 +181,7 @@ class SyncService {
             data: payload,
           );
           print("POST event $id -> ${response.statusCode}");
-        } else if (status == SyncStatus.pendingUpdate) {
+        } else if (status == SyncStatus.pendingUpdate.value) {
           final response = await authRepository.put(
             '/api/events/$id/',
             data: payload,
