@@ -13,7 +13,7 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 class AppThemeState {
   final ThemeMode mode;
   final Color seedColor;
-  final bool isLegacyMode; // <--- NEU: Speichert, ob das Retro-Theme aktiv ist
+  final bool isLegacyMode;
 
   const AppThemeState({
     required this.mode,
@@ -39,7 +39,7 @@ class ThemeNotifier extends Notifier<AppThemeState> {
   // Schlüssel für die Datenbank
   static const _keyThemeMode = 'theme_mode';
   static const _keySeedColor = 'seed_color';
-  static const _keyLegacyMode = 'theme_legacy_mode'; // <--- Neuer Key
+  static const _keyLegacyMode = 'theme_legacy_mode';
 
   @override
   AppThemeState build() {

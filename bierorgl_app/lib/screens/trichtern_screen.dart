@@ -14,9 +14,14 @@ class TrichternScreen extends ConsumerStatefulWidget {
 }
 
 class _TrichternScreenState extends ConsumerState<TrichternScreen> {
+  // ===========================================================================
+  // 1. STATE & LISTENER LOGIC
+  // ===========================================================================
+
   @override
   Widget build(BuildContext context) {
-    // 1. Beobachte den Verbindungsstatus & die Daten-Eingänge separat
+    // --- PROVIDER WATCHERS ---
+    // Beobachte den Verbindungsstatus & die Daten-Eingänge separat
     // Nutzt Riverpod's Reaktivität statt manueller Timer
     final connection = ref.watch(trichterConnectionProvider);
     final dataState = ref.watch(trichterDataHandlerProvider);
@@ -24,8 +29,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     final bool isConnected =
         connection.status == TrichterConnectionStatus.connected;
 
-    // 2. Navigation-Listener: Reagiert auf das Ende der Übertragung
-    // Dies ist ein Side-Effect und gehört sauber in ref.listen
+    // --- NAVIGATION LISTENER ---
+    // Reagiert auf das Ende der Übertragung (Side-Effect)
     ref.listen<TrichterDataState>(trichterDataHandlerProvider,
         (previous, next) {
       // Navigation auslösen, wenn isSessionFinished von false auf true springt
@@ -83,6 +88,10 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       }
     });
 
+    // ===========================================================================
+    // 2. UI LAYOUT BUILD
+    // ===========================================================================
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
@@ -110,8 +119,13 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     );
   }
 
-  // --- UI KOMPONENTEN ---
+  // ===========================================================================
+  // 3. HELPER WIDGETS
+  // ===========================================================================
 
+  // ---------------------------------------------------------------------------
+  // Header: Titel und Slogan
+  // ---------------------------------------------------------------------------
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -137,6 +151,9 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Status Circle: Zeigt Verbindung, Icon oder Lade-Indikator
+  // ---------------------------------------------------------------------------
   Widget _buildStatusCircle(
       BuildContext context, bool isConnected, TrichterDataState data) {
     final theme = Theme.of(context);
@@ -197,6 +214,9 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Footer: Status-Text Anweisungen
+  // ---------------------------------------------------------------------------
   Widget _buildFooter(
       BuildContext context, bool isConnected, TrichterDataState data) {
     String footerText = "Warte auf ersten Schluck...";
