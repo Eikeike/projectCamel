@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:project_camel/core/constants.dart';
 import 'package:project_camel/services/database_helper.dart';
 import 'package:project_camel/models/session.dart';
@@ -5,9 +7,10 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 class SessionRepository {
-  final DatabaseHelper _db;
+  SessionRepository(this._db, this._bus);
 
-  SessionRepository(this._db);
+  final DatabaseHelper _db;
+  final StreamController<DbTopic> _bus;
 
   /// non-deleted sessions, newest first
   Future<List<Session>> getAllSessions() async {
@@ -32,6 +35,21 @@ class SessionRepository {
     return Session.fromSessionRow(rows.first);
   }
 
+  Future<List<Session>> getSessionsByUserID(String userID) async {
+    final db = await _db.database;
+
+    final rows = await db.rawQuery('''
+      SELECT s.*, e.name AS eventName
+      FROM Session s
+      LEFT JOIN Event e ON s.eventID = e.eventID
+      WHERE s.userID = ? 
+        AND s.localDeletedAt IS NULL
+      ORDER BY s.startedAt DESC
+    ''', [userID]);
+
+    return rows.map(Session.fromHistoryRow).toList();
+  }
+
   Future<void> markSessionAsDeleted(String sessionID) async {
     final db = await _db.database;
     final nowIso = DateTime.now().toIso8601String();
@@ -45,6 +63,7 @@ class SessionRepository {
       where: 'sessionID = ?',
       whereArgs: [sessionID],
     );
+    _bus.add(DbTopic.sessions);
   }
 
   Future<List<Map<String, dynamic>>> getPendingSessions() async {
@@ -60,23 +79,19 @@ class SessionRepository {
     );
   }
 
-  Future<void> upsertSessionFromServer(Map<String, dynamic> data) async {
-    final db = await _db.database;
+  Future<void> upsertFromServer(
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+    bool notify = true,
+  }) async {
+    final db = executor ?? await _db.database;
+
+    final session = Session.fromServer(data);
 
     final row = <String, dynamic>{
-      'sessionID': data['id'],
-      'volumeML': (data['volume'] as num?)?.toInt(),
-      'name': data['name'],
-      'description': data['description'],
-      'latitude': (data['latitude'] as num?)?.toDouble(),
-      'longitude': (data['longitude'] as num?)?.toDouble(),
-      'startedAt': data['started_at'],
-      'userID': data['user'],
-      'eventID': data['event'],
-      'durationMS': (data['duration_ms'] as num?)?.toInt(),
-      'valuesJSON': data['values']?.toString(),
-      'calibrationFactor': (data['calibration_factor'] as num?)?.toInt(),
-      'localDeletedAt': data['deleted_at'],
+      ...session.toDb(),
+      'localDeletedAt': data[
+          'deleted_at'], // or null if you want to clear local deletions on server upsert
       'syncStatus': SyncStatus.synced.value,
     };
 
@@ -85,18 +100,29 @@ class SessionRepository {
       row,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+
+    if (notify) {
+      _bus.add(DbTopic.sessions);
+
+      // Only emit events if your UI has event-derived-from-sessions queries
+      // (session counts per event, event “has sessions” state, etc.)
+      if (session.eventID != null) {
+        _bus.add(DbTopic.events);
+      }
+    }
   }
 
-  Future<int> saveLocalSession(Session session) async {
+  Future<void> saveLocalSession(Session session) async {
     final db = await _db.database;
-    return db.insert(
+    await db.insert(
       'Session',
       session.toDb(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _bus.add(DbTopic.sessions);
   }
 
-  Future<int> saveSessionForSync(
+  Future<void> saveSessionForSync(
     Session session, {
     bool isEditing = false,
   }) async {
@@ -111,7 +137,7 @@ class SessionRepository {
 
     if (!isEditing) {
       row['syncStatus'] = SyncStatus.pendingCreate.value;
-      return db.insert(
+      await db.insert(
         'Session',
         row,
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -128,7 +154,7 @@ class SessionRepository {
     if (existingRows.isEmpty) {
       // Fallback: treat as create
       row['syncStatus'] = SyncStatus.pendingCreate.value;
-      return db.insert('Session', row);
+      await db.insert('Session', row);
     }
 
     final existing = existingRows.first;
@@ -140,11 +166,12 @@ class SessionRepository {
       row['syncStatus'] = SyncStatus.pendingUpdate.value;
     }
 
-    return db.update(
+    await db.update(
       'Session',
       row,
       where: 'sessionID = ?',
       whereArgs: [sessionID],
     );
+    _bus.add(DbTopic.sessions);
   }
 }

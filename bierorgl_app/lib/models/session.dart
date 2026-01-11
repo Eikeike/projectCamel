@@ -155,4 +155,32 @@ class Session {
       'calibrationFactor': calibrationFactor,
     };
   }
+
+  factory Session.fromServer(Map<String, dynamic> json) {
+    DateTime parseStartedAt(dynamic v) {
+      if (v == null) {
+        throw ArgumentError('started_at is null');
+      }
+      if (v is String) {
+        return _parseRequiredDateTime(v, 'started_at');
+      }
+      throw ArgumentError('Invalid started_at type: ${v.runtimeType}');
+    }
+
+    return Session(
+      id: (json['id'] ?? '') as String,
+      volumeML: (json['volume'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String?,
+      description: json['description'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      startedAt: parseStartedAt(json['started_at']),
+      userID: (json['user'] ?? '') as String,
+      eventID: json['event'] as String?,
+      durationMS: (json['duration_ms'] as num?)?.toInt() ?? 0,
+      valuesJSON: json['values']
+          ?.toString(), // adjust if values is already a JSON string
+      calibrationFactor: (json['calibration_factor'] as num?)?.toInt(),
+    );
+  }
 }

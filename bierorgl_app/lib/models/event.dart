@@ -72,4 +72,53 @@ class Event {
       'longitude': longitude,
     };
   }
+
+  factory Event.fromServer(Map<String, dynamic> json) {
+    DateTime? parseDate(dynamic value) {
+      if (value == null) return null;
+      if (value is String && value.isNotEmpty) {
+        try {
+          return DateTime.parse(value);
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    return Event(
+      id: (json['id'] ?? '') as String,
+      name: (json['name'] ?? '') as String,
+      description: json['description'] as String?,
+      dateFrom: parseDate(json['date_from']),
+      dateTo: parseDate(json['date_to']),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class EventStats {
+  final String eventId;
+  final String eventName;
+  final int sessionCount;
+  final int totalVolumeML;
+
+  const EventStats({
+    required this.eventId,
+    required this.eventName,
+    required this.sessionCount,
+    required this.totalVolumeML,
+  });
+
+  double get totalVolumeL => totalVolumeML / 1000.0;
+
+  factory EventStats.fromRow(Map<String, dynamic> row) {
+    return EventStats(
+      eventId: row['eventID'] as String,
+      eventName: row['name'] as String? ?? '',
+      sessionCount: (row['count'] as num?)?.toInt() ?? 0,
+      totalVolumeML: (row['totalVol'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

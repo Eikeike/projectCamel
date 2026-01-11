@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:project_camel/core/constants.dart';
 import 'package:project_camel/services/database_helper.dart';
 import 'package:project_camel/models/event.dart';
@@ -5,9 +7,9 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 class EventRepository {
+  EventRepository(this._db, this._bus);
   final DatabaseHelper _db;
-
-  EventRepository(this._db);
+  final StreamController<DbTopic> _bus;
 
   Future<List<Event>> getAllEvents() async {
     final db = await _db.database;
@@ -45,6 +47,7 @@ class EventRepository {
       where: 'eventID = ?',
       whereArgs: [eventID],
     );
+    _bus.add(DbTopic.events);
   }
 
   Future<List<Map<String, dynamic>>> getPendingEvents() async {
@@ -60,17 +63,40 @@ class EventRepository {
     );
   }
 
-  Future<void> upsertEventFromServer(Map<String, dynamic> data) async {
+  Future<List<EventStats>> getTopEventsByUser(
+    String userId, {
+    int limit = 3,
+  }) async {
     final db = await _db.database;
 
+    final res = await db.rawQuery('''
+    SELECT
+      e.eventID,
+      e.name,
+      COUNT(s.sessionID) as count,
+      COALESCE(SUM(s.volumeML), 0) as totalVol
+    FROM Session s
+    JOIN Event e ON s.eventID = e.eventID
+    WHERE s.userID = ? AND s.localDeletedAt IS NULL AND s.eventID IS NOT NULL
+    GROUP BY s.eventID
+    ORDER BY count DESC
+    LIMIT ?
+  ''', [userId, limit]);
+
+    return res.map(EventStats.fromRow).toList();
+  }
+
+  Future<void> upsertFromServer(
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+    bool notify = true,
+  }) async {
+    final db = executor ?? await _db.database;
+
+    final event = Event.fromServer(data);
+
     final row = <String, dynamic>{
-      'eventID': data['id'],
-      'name': data['name'],
-      'description': data['description'],
-      'dateFrom': data['date_from'],
-      'dateTo': data['date_to'],
-      'latitude': (data['latitude'] as num?)?.toDouble(),
-      'longitude': (data['longitude'] as num?)?.toDouble(),
+      ...event.toDb(),
       'localDeletedAt': null,
       'syncStatus': SyncStatus.synced.value,
     };
@@ -80,9 +106,23 @@ class EventRepository {
       row,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+
+    if (notify) {
+      _bus.add(DbTopic.events);
+    }
   }
 
-  Future<int> saveEventForSync(Event event) async {
+  Future<void> markSynced(String eventID) async {
+    final db = await _db.database;
+    await db.update(
+      'Event',
+      {'syncStatus': SyncStatus.synced.value},
+      where: 'eventID = ?',
+      whereArgs: [eventID],
+    );
+  }
+
+  Future<void> saveEventForSync(Event event) async {
     final db = await _db.database;
     final eventID = event.id.isNotEmpty ? event.id : const Uuid().v4();
 
@@ -101,7 +141,7 @@ class EventRepository {
 
     if (existingRows.isEmpty) {
       row['syncStatus'] = SyncStatus.pendingCreate.value;
-      return db.insert('Event', row);
+      await db.insert('Event', row);
     } else {
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
@@ -111,12 +151,13 @@ class EventRepository {
           ? SyncStatus.pendingCreate.value
           : SyncStatus.pendingUpdate.value;
 
-      return db.update(
+      await db.update(
         'Event',
         row,
         where: 'eventID = ?',
         whereArgs: [eventID],
       );
     }
+    _bus.add(DbTopic.events);
   }
 }
