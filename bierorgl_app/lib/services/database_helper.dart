@@ -3,6 +3,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
 import 'package:project_camel/models/event.dart';
+import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -116,10 +118,12 @@ class DatabaseHelper {
     Database db = await database;
     return await db.insert('Session', session);
   }
+
   //Löschen? und alles in eigene repos auslagern
   Future<List<Map<String, dynamic>>> getEvents() async {
     Database db = await database;
-    return await db.query('Event', where: 'localDeletedAt IS NULL', orderBy: 'dateFrom DESC');
+    return await db.query('Event',
+        where: 'localDeletedAt IS NULL', orderBy: 'dateFrom DESC');
   }
 
   Future<List<Map<String, dynamic>>> getUsers() async {
@@ -320,9 +324,9 @@ class DatabaseHelper {
   }
 
   Future<void> upsertUserFromServer(
-      Map<String, dynamic> data, {
-        DatabaseExecutor? executor,
-      }) async {
+    Map<String, dynamic> data, {
+    DatabaseExecutor? executor,
+  }) async {
     final db = executor ?? await database;
 
     final row = <String, dynamic>{
@@ -340,83 +344,6 @@ class DatabaseHelper {
       'User',
       row,
       conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<void> upsertEventFromServer(Map<String, dynamic> data,
-      {DatabaseExecutor? executor}) async {
-    final db = executor ?? await database;
-
-    final row = <String, dynamic>{
-      'eventID': data['id'],
-      'name': data['name'],
-      'description': data['description'],
-      'dateFrom': data['date_from'],
-      'dateTo': data['date_to'],
-      'latitude': (data['latitude'] as num?)?.toDouble(),
-      'longitude': (data['longitude'] as num?)?.toDouble(),
-      'localDeletedAt': null,
-      'syncStatus': SyncStatus.synced.value,
-    };
-
-    await db.insert(
-      'Event',
-      row,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<void> upsertSessionFromServer(Map<String, dynamic> data,
-      {DatabaseExecutor? executor}) async {
-    final db = executor ?? await database;
-
-    final row = <String, dynamic>{
-      'sessionID': data['id'],
-      'volumeML': (data['volume'] as num?)?.toInt(),
-      'name': data['name'],
-      'description': data['description'],
-      'latitude': (data['latitude'] as num?)?.toDouble(),
-      'longitude': (data['longitude'] as num?)?.toDouble(),
-      'startedAt': data['started_at'],
-      'userID': data['user'],
-      'eventID': data['event'],
-      'durationMS': (data['duration_ms'] as num?)?.toInt(),
-      'valuesJSON': data['values']?.toString(),
-      'calibrationFactor': (data['calibration_factor'] as num?)?.toInt(),
-      'localDeletedAt': data['deleted_at'],
-      'syncStatus': SyncStatus.synced.value,
-    };
-
-    await db.insert(
-      'Session',
-      row,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getPendingEvents() async {
-    final db = await database;
-    return db.query(
-      'Event',
-      where: 'syncStatus IN (?, ?, ?)',
-      whereArgs: [
-        SyncStatus.pendingCreate.value,
-        SyncStatus.pendingUpdate.value,
-        SyncStatus.pendingDelete.value,
-      ],
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getPendingSessions() async {
-    final db = await database;
-    return db.query(
-      'Session',
-      where: 'syncStatus IN (?, ?, ?)',
-      whereArgs: [
-        SyncStatus.pendingCreate.value,
-        SyncStatus.pendingUpdate.value,
-        SyncStatus.pendingDelete.value
-      ],
     );
   }
 
@@ -513,10 +440,12 @@ class DatabaseHelper {
     }
   }
 
-  Future<int> saveSessionForSync(Map<String, dynamic> session, {bool isEditing = false}) async {
+  Future<int> saveSessionForSync(Map<String, dynamic> session,
+      {bool isEditing = false}) async {
     final db = await database;
     String sessionID = session['sessionID'] as String? ?? const Uuid().v4();
-    print("DEBUG_ML (database_helper): saveSessionForSync aufgerufen für sessionID $sessionID. isEditing: $isEditing");
+    print(
+        "DEBUG_ML (database_helper): saveSessionForSync aufgerufen für sessionID $sessionID. isEditing: $isEditing");
 
     final row = <String, dynamic>{
       'sessionID': sessionID,
@@ -537,9 +466,11 @@ class DatabaseHelper {
     if (!isEditing) {
       // Immer PENDING_CREATE, wenn es eine neue Session vom Trichter ist
       row['syncStatus'] = SyncStatus.pendingCreate.value;
-      print("DEBUG_ML (database_helper): Neue Session wird erstellt. Status: ${row['syncStatus']}.");
+      print(
+          "DEBUG_ML (database_helper): Neue Session wird erstellt. Status: ${row['syncStatus']}.");
       print("DEBUG_ML (database_helper): Schreibe in DB: $row");
-      return await db.insert('Session', row, conflictAlgorithm: ConflictAlgorithm.replace);
+      return await db.insert('Session', row,
+          conflictAlgorithm: ConflictAlgorithm.replace);
     } else {
       // Wenn wir im Bearbeitungsmodus sind, prüfen wir den bestehenden Status
       final existingRows = await db.query(
@@ -552,14 +483,16 @@ class DatabaseHelper {
       if (existingRows.isEmpty) {
         // Sollte nicht passieren im Bearbeitungsmodus, aber als Fallback
         row['syncStatus'] = SyncStatus.pendingCreate.value;
-        print("DEBUG_ML (database_helper): Bearbeitungsmodus, aber Session nicht gefunden. Erstelle sie neu. Status: ${row['syncStatus']}.");
+        print(
+            "DEBUG_ML (database_helper): Bearbeitungsmodus, aber Session nicht gefunden. Erstelle sie neu. Status: ${row['syncStatus']}.");
         print("DEBUG_ML (database_helper): Schreibe in DB: $row");
         return await db.insert('Session', row);
       }
 
       final existing = existingRows.first;
       final currentStatus = existing['syncStatus'] as String?;
-      print("DEBUG_ML (database_helper): Bestehende Session gefunden. Aktueller syncStatus: $currentStatus");
+      print(
+          "DEBUG_ML (database_helper): Bestehende Session gefunden. Aktueller syncStatus: $currentStatus");
 
       // Wenn sie noch nie gesynct wurde, bleibt sie PENDING_CREATE
       if (currentStatus == SyncStatus.pendingCreate.value) {
@@ -569,7 +502,8 @@ class DatabaseHelper {
         row['syncStatus'] = SyncStatus.pendingUpdate.value;
       }
 
-      print("DEBUG_ML (database_helper): Session wird aktualisiert. Neuer Status: ${row['syncStatus']}.");
+      print(
+          "DEBUG_ML (database_helper): Session wird aktualisiert. Neuer Status: ${row['syncStatus']}.");
       print("DEBUG_ML (database_helper): Schreibe in DB: $row");
       return await db.update(
         'Session',
@@ -608,5 +542,40 @@ class DatabaseHelper {
       where: 'sessionID = ?',
       whereArgs: [sessionID],
     );
+  }
+}
+
+// change bus:
+enum DbTopic { events, sessions, users, metadata, all }
+
+final dbChangeBusProvider = Provider<StreamController<DbTopic>>((ref) {
+  final controller = StreamController<DbTopic>.broadcast();
+  ref.onDispose(controller.close);
+  return controller;
+});
+
+// evtl später debounce hinzufügen?
+Stream<T> watchQuery<T>({
+  required Stream<DbTopic> bus,
+  required DbTopic topic,
+  required Future<T> Function() query,
+}) async* {
+  yield await query();
+  await for (final _ in bus.where((t) => t == topic || t == DbTopic.all)) {
+    yield await query();
+  }
+}
+
+Stream<T> watchQueryMulti<T>({
+  required Stream<DbTopic> bus,
+  required Set<DbTopic> topics,
+  required Future<T> Function() query,
+}) async* {
+  yield await query();
+
+  await for (final t in bus) {
+    if (t == DbTopic.all || topics.contains(t)) {
+      yield await query();
+    }
   }
 }

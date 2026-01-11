@@ -2,8 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/repositories/auth_repository.dart';
 import '../services/database_helper.dart';
 
-
-
 class AuthState {
   final bool isLoading;
   final String? userId;
@@ -17,14 +15,16 @@ class AuthState {
 
   bool get isAuthenticated => userId != null;
 
+  static const _unset = Object();
+
   AuthState copyWith({
     bool? isLoading,
-    String? userId,
+    Object? userId = _unset,
     String? errorMessage,
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
-      userId: userId ?? this.userId,
+      userId: userId == _unset ? this.userId : userId as String?,
       errorMessage: errorMessage,
     );
   }
@@ -45,7 +45,8 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> _loadInitialAuthState() async {
     try {
-      final userId = await _authRepository.getStoredUserIdAllowingExpired();
+      final userId = await _authRepository
+          .getUserID(); //.getStoredUserIdAllowingExpired();
 
       if (!ref.mounted) return;
       state = state.copyWith(
@@ -65,20 +66,18 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
+
     try {
       await _authRepository.login(email: email, password: password);
 
-      final userId = await _authRepository.getUserID();
+      final userId =
+          await _authRepository.getUserID(); //getStoredUserIdAllowingExpired();
       if (userId == null) {
-        throw Exception(
-          'Login erfolgreich, aber User-ID konnte nicht abgerufen werden.',
-        );
+        throw Exception('Login erfolgreich, aber User-ID fehlt im Token.');
       }
 
-      // lass das mal bitte rausnehmen. TODO REFACTOR
+      // Optional: remove later if you don’t want DB side effects here
       await DatabaseHelper().updateLoggedInUser(userId);
-      // weil über den riverpod state kriegen wir jetzt immer auch die userID.
-
 
       if (!ref.mounted) return;
       state = state.copyWith(
@@ -102,6 +101,7 @@ class AuthController extends Notifier<AuthState> {
     state = state.copyWith(
       userId: null,
       errorMessage: null,
+      isLoading: false,
     );
   }
 }

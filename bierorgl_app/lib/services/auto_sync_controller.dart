@@ -45,7 +45,6 @@ class AutoSyncController {
 
     try {
       await _syncService.sync();
-      _notifyDataChanged();
     } on DioException catch (e, s) {
       print("AutoSyncController: sync failed (DioException): $e\n$s");
 
@@ -65,10 +64,5 @@ class AutoSyncController {
         _runIfNeeded();
       }
     }
-  }
-
-  void _notifyDataChanged() {
-    _ref.invalidate(eventRepositoryProvider);
-    _ref.invalidate(sessionRepositoryProvider);
   }
 }

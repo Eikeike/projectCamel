@@ -1,13 +1,30 @@
+import 'dart:async';
+
 import 'package:project_camel/core/constants.dart';
+import 'package:project_camel/repositories/event_repository.dart';
+import 'package:project_camel/repositories/sesion_repository.dart';
 import 'package:sqflite/sqflite.dart';
 import 'database_helper.dart';
 import '../repositories/auth_repository.dart';
 
 class SyncService {
+  SyncService({
+    required this.authRepository,
+    required this.eventRepo,
+    required this.sessionRepo,
+    //required this.userRepo,
+    //required this.metadataRepo,
+    required this.bus,
+  });
+
   final AuthRepository authRepository;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  SyncService({required this.authRepository});
+  final EventRepository eventRepo;
+  final SessionRepository sessionRepo;
+  //final UserRepository userRepo;
+  //final MetadataRepository metadataRepo;
+  final StreamController<DbTopic> bus;
 
   Future<void> sync() async {
     print("---Enter Sync---");
@@ -17,12 +34,12 @@ class SyncService {
 
   Future<void> push() async {
     print("---Sync.push---");
-    final pendingEvents = await _dbHelper.getPendingEvents();
+    final pendingEvents = await eventRepo.getPendingEvents();
     print("---Sync.push: ${pendingEvents.length} pending events");
 
     await uploadEvents(pendingEvents);
 
-    final pendingSessions = await _dbHelper.getPendingSessions();
+    final pendingSessions = await sessionRepo.getPendingSessions();
     print("---Sync.push: ${pendingSessions.length} pending sessions");
 
     await uploadSessions(pendingSessions);
@@ -31,6 +48,7 @@ class SyncService {
   Future<void> pull() async {
     print("---Sync.pull---");
 
+    //auslagern!
     final currentSeq = await _dbHelper.getCurrentDbSequence();
     print("currentSeq: $currentSeq");
 
@@ -40,11 +58,10 @@ class SyncService {
     );
 
     final body = response.data as Map<String, dynamic>;
-    //print("BODY: $body");
-
     final changes = (body['changes'] as List<dynamic>? ?? []);
     final int newSeq = (body['next_cursor'] as int?) ?? currentSeq;
 
+    final changed = <DbTopic>{};
     final db = await _dbHelper.database;
 
     await db.transaction((txn) async {
@@ -62,62 +79,84 @@ class SyncService {
             data is Map<String, dynamic> ? data : null;
 
         if (op == 'upsert') {
-          await upsert(type, dataMap, executor: txn);
+          final topic = await upsert(type, dataMap, executor: txn);
+          if (topic != null) changed.add(topic);
         } else if (op == 'delete') {
-          await delete(type, id, executor: txn);
-        } else {
-          print("Unknown op: $op");
+          final topic = await delete(type, id, executor: txn);
+          if (topic != null) changed.add(topic);
         }
       }
 
+      for (final t in changed) {
+        bus.add(t);
+      }
       await _dbHelper.setDbSequence(newSeq, executor: txn);
     });
     // print("SYNC: updated dbSequence to $newSeq");
   }
 
-  Future<void> upsert(type, dataMap, {DatabaseExecutor? executor}) async {
+  Future<DbTopic?> upsert(
+    String type,
+    Map<String, dynamic>? dataMap, {
+    DatabaseExecutor? executor,
+  }) async {
     switch (type) {
       case 'user':
         if (dataMap != null) {
-          print("upsert user: $dataMap");
           await _dbHelper.upsertUserFromServer(dataMap, executor: executor);
+          return DbTopic.users;
         } else {
           print("WARN: user change received empty dataMap");
+          return null;
         }
-        break;
+
       case 'event':
         if (dataMap != null) {
-          await _dbHelper.upsertEventFromServer(dataMap, executor: executor);
+          await eventRepo.upsertFromServer(dataMap,
+              executor: executor, notify: false);
+          return DbTopic.events;
         } else {
           print("WARN: event change received empty dataMap");
+          return null;
         }
-        break;
+
       case 'session':
         if (dataMap != null) {
-          await _dbHelper.upsertSessionFromServer(dataMap, executor: executor);
+          await sessionRepo.upsertFromServer(dataMap,
+              executor: executor, notify: false);
+          return DbTopic.sessions;
         } else {
           print("WARN: session change received empty dataMap");
+          return null;
         }
-        break;
+
       default:
         print("Unknown type: $type");
+        return null;
     }
   }
 
-  Future<void> delete(type, id, {DatabaseExecutor? executor}) async {
-    print("---Enter delete---");
+  Future<DbTopic?> delete(
+    String type,
+    String id, {
+    DatabaseExecutor? executor,
+  }) async {
     switch (type) {
       case 'user':
         await _dbHelper.syncDeleteUserById(id, executor: executor);
-        break;
+        return DbTopic.users;
+
       case 'event':
         await _dbHelper.syncDeleteEventById(id, executor: executor);
-        break;
+        return DbTopic.events;
+
       case 'session':
         await _dbHelper.syncDeleteSessionById(id, executor: executor);
-        break;
+        return DbTopic.sessions;
+
       default:
         print("Unknown type for delete: $type");
+        return null;
     }
   }
 
@@ -158,7 +197,7 @@ class SyncService {
           continue;
         }
 
-        await _dbHelper.markEventSynced(event['eventID'] as String);
+        await eventRepo.markSynced(event['eventID'] as String);
       } catch (e) {
         print("ERROR while pushing event ${event['eventID']}: $e");
         // NICHT auf synced setzen

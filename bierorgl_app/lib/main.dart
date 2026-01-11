@@ -133,9 +133,7 @@ class MyApp extends ConsumerWidget {
 
 // Diese Klasse regelt den Zugriff (Login vs. Home)
 class AuthGate extends ConsumerWidget {
-  final dynamic
-      autoSyncController; // Typ dynamisch oder konkret, je nach deiner Definition
-
+  final dynamic autoSyncController;
   const AuthGate({super.key, required this.autoSyncController});
 
   @override
