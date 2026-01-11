@@ -3,15 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:project_camel/models/session.dart';
+import 'package:project_camel/models/event.dart';
 import 'package:uuid/uuid.dart';
-import '../services/bluetooth_service.dart';
-import '../services/database_helper.dart';
 import 'package:project_camel/core/constants.dart';
+import 'package:project_camel/providers.dart';
 import '../widgets/selection_list.dart';
 import '../widgets/speed_graph.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
-  final Map<String, dynamic>? session;
+  final Session? session;
   final int? durationMS;
   final List<int>? allValues;
   final double? calibrationFactor;
@@ -32,11 +33,7 @@ class SessionScreen extends ConsumerStatefulWidget {
 }
 
 class _SessionScreenState extends ConsumerState<SessionScreen> {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
   late TextEditingController _nameController;
-
-  List<Map<String, dynamic>> _users = [];
-  List<Map<String, dynamic>> _events = [];
 
   String? _selectedUserID;
   String? _selectedEventID;
@@ -53,10 +50,10 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
     if (_isEditing) {
       final s = widget.session!;
-      _nameController = TextEditingController(text: s['name'] ?? '');
-      _selectedUserID = s['userID'];
-      _selectedEventID = s['eventID'];
-      _selectedVolumeML = s['volumeML'] ?? 500;
+      _nameController = TextEditingController(text: s.name);
+      _selectedUserID = s.userID;
+      _selectedEventID = s.eventID;
+      _selectedVolumeML = s.volumeML;
     } else {
       String formattedDate =
           DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now());
@@ -69,25 +66,16 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         // Toleranz von 75ml
         if ((measuredVolume - 330).abs() <= 75) {
           _selectedVolumeML = 330; // Wähle 0,33L vor
-          print(
-              "DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 330ml. Wähle 0,33L vor.");
         } else if ((measuredVolume - 500).abs() <= 75) {
           _selectedVolumeML = 500; // Wähle 0,5L vor
-          print(
-              "DEBUG_ML (session_screen): Messung ($measuredVolume ml) ist nah an 500ml. Wähle 0,5L vor.");
         } else {
           _selectedVolumeML = measuredVolume; // Setze den exakten Custom-Wert
-          print(
-              "DEBUG_ML (session_screen): Messung ($measuredVolume ml) außerhalb der Toleranz. Wähle Custom-Wert vor.");
         }
       } else {
         _selectedVolumeML = 500; // Fallback
-        print(
-            "DEBUG_ML (session_screen): Kein gültiges Volumen gemessen. Fallback auf 500ml.");
       }
     }
 
-    _loadInitialData();
     _getCurrentLocation();
   }
 
@@ -128,17 +116,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     }
   }
 
-  Future<void> _loadInitialData() async {
-    final users = await _dbHelper.getUsers();
-    final events = await _dbHelper.getEvents();
-    if (mounted) {
-      setState(() {
-        _users = users;
-        _events = events;
-      });
-    }
-  }
-
   void _addGuestUser() {
     final guestController = TextEditingController();
     showDialog(
@@ -158,14 +135,14 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             onPressed: () async {
               if (guestController.text.isNotEmpty) {
                 final newId = const Uuid().v4();
-                await _dbHelper.insertUser({
+                await ref.read(databaseHelperProvider).insertUser({
                   'userID': newId,
                   'name': guestController.text,
                   'username':
                       'gast_${guestController.text.toLowerCase().replaceAll(' ', '_')}',
                   'eMail': 'gast@bierorgl.de',
                 });
-                await _loadInitialData();
+
                 if (mounted) {
                   setState(() => _selectedUserID = newId);
                   Navigator.pop(context);
@@ -219,37 +196,36 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     setState(() => _isSaving = true);
 
     try {
-      final sessionData = {
-        'sessionID':
-            _isEditing ? widget.session!['sessionID'] : const Uuid().v4(),
-        'startedAt': _isEditing
-            ? widget.session!['startedAt']
-            : DateTime.now().toIso8601String(),
-        'userID': _selectedUserID,
-        'volumeML': _selectedVolumeML,
-        'durationMS':
-            _isEditing ? widget.session!['durationMS'] : widget.durationMS,
-        'eventID': _selectedEventID,
-        'name': _nameController.text.isNotEmpty ? _nameController.text : null,
-        'description': _isEditing ? widget.session!['description'] : null,
-        'latitude': _isEditing
-            ? widget.session!['latitude']
+      // Construct typed Session model and persist via repository
+      final session = Session(
+        id: _isEditing ? widget.session!.id : '',
+        volumeML: _selectedVolumeML,
+        name: _nameController.text.isNotEmpty ? _nameController.text : null,
+        description: _isEditing ? widget.session!.description : null,
+        latitude: _isEditing
+            ? widget.session!.latitude
             : (_currentPosition?.latitude ?? 0.0),
-        'longitude': _isEditing
-            ? widget.session!['longitude']
+        longitude: _isEditing
+            ? widget.session!.longitude
             : (_currentPosition?.longitude ?? 0.0),
-        'valuesJSON': _isEditing
-            ? widget.session!['valuesJSON']
-            : jsonEncode(widget.allValues),
-        'calibrationFactor': _isEditing
-            ? widget.session!['calibrationFactor']
+        startedAt: _isEditing ? widget.session!.startedAt : DateTime.now(),
+        userID: _selectedUserID ?? '',
+        eventID: _selectedEventID,
+        durationMS:
+            _isEditing ? widget.session!.durationMS : (widget.durationMS ?? 0),
+        valuesJSON: _isEditing
+            ? widget.session!.valuesJSON
+            : (widget.allValues != null ? jsonEncode(widget.allValues) : null),
+        calibrationFactor: _isEditing
+            ? widget.session!.calibrationFactor
             : widget.calibrationFactor?.toInt(),
-      };
+      );
 
-      print(
-          "DEBUG_ML (session_screen): Speichere Session. Der 'calibrationFactor', der in die DB geht, ist ${sessionData['calibrationFactor']}");
+      print("DEBUG_ML (session_screen): Speichere Session (typed model)");
 
-      await _dbHelper.saveSessionForSync(sessionData, isEditing: _isEditing);
+      await ref
+          .read(sessionRepositoryProvider)
+          .saveSessionForSync(session, isEditing: _isEditing);
 
       if (mounted) {
         Navigator.pop(context);
@@ -271,6 +247,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final usersAsync = ref.watch(usersProvider);
+    final eventsAsync = ref.watch(allEventsProvider);
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
@@ -319,13 +298,17 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                 ),
               ),
             const SizedBox(height: 32),
-            UserSelectionField(
-              users: _users,
-              selectedUserID: _selectedUserID,
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedUserID = val);
-              },
-              onAddGuest: _addGuestUser,
+            usersAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Text('Fehler beim Laden der User: $e'),
+              data: (users) => UserSelectionField(
+                users: users,
+                selectedUserID: _selectedUserID,
+                onChanged: (val) {
+                  if (val != null) setState(() => _selectedUserID = val);
+                },
+                onAddGuest: _addGuestUser,
+              ),
             ),
             const SizedBox(height: 24),
 // Linksbündiges Label im M3-Stil
@@ -365,7 +348,10 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               ),
             ),
             EventSelectionField(
-              events: _events,
+              events: eventsAsync.asData?.value
+                      ?.map((e) => {'eventID': e.id, 'name': e.name})
+                      .toList() ??
+                  [],
               selectedEventID: _selectedEventID,
               onChanged: (val) => setState(() => _selectedEventID = val),
             ),
