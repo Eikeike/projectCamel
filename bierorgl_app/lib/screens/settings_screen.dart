@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/auth/auth_providers.dart';
 import '../core/constants.dart';
 import '../core/color_constants.dart'; // Oder wo auch immer deine AppColors sind
 import '../theme/theme_provider.dart';
@@ -429,9 +430,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: const Text('Abbrechen'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
               debugPrint("User hat Logout geklickt");
+              await ref.read(authControllerProvider.notifier).logout();
             },
             child: const Text('Abmelden'),
           ),
