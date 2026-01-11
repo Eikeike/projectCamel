@@ -3,6 +3,8 @@ import 'color_constants.dart'; // Import der neuen Datei
 
 class AppConstants {
   static const apiBaseUrl = 'https://dev.trichter.biertrinkenistgesund.de';
+  static const loginPath = '/api/auth/login/';
+  static const tokenRefreshPath = '/api/auth/token/refresh/';
   static const bleDeviceId = 'ABC-123';
   static const autoSyncDebounceIntervalSeconds = 7;
 

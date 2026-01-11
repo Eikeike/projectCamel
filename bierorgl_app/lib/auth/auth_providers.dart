@@ -20,12 +20,13 @@ class AuthState {
   AuthState copyWith({
     bool? isLoading,
     Object? userId = _unset,
-    String? errorMessage,
+    Object? errorMessage = _unset,
   }) {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
       userId: userId == _unset ? this.userId : userId as String?,
-      errorMessage: errorMessage,
+      errorMessage:
+          errorMessage == _unset ? this.errorMessage : errorMessage as String?,
     );
   }
 }
@@ -45,8 +46,7 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> _loadInitialAuthState() async {
     try {
-      final userId = await _authRepository
-          .getUserID(); //.getStoredUserIdAllowingExpired();
+      final userId = await _authRepository.getStoredUserIdAllowingExpired();
 
       if (!ref.mounted) return;
       state = state.copyWith(
@@ -70,13 +70,11 @@ class AuthController extends Notifier<AuthState> {
     try {
       await _authRepository.login(email: email, password: password);
 
-      final userId =
-          await _authRepository.getUserID(); //getStoredUserIdAllowingExpired();
+      final userId = await _authRepository.getStoredUserIdAllowingExpired();
+
       if (userId == null) {
         throw Exception('Login erfolgreich, aber User-ID fehlt im Token.');
       }
-
-      // Optional: remove later if you don’t want DB side effects here
       await DatabaseHelper().updateLoggedInUser(userId);
 
       if (!ref.mounted) return;
@@ -96,6 +94,7 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    print('AUTH: logout() called - clearing tokens');
     await _authRepository.logout();
     if (!ref.mounted) return;
     state = state.copyWith(

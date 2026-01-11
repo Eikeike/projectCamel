@@ -29,7 +29,7 @@ class AuthRepository {
 
           // Prevent recursion
           final isRefreshCall =
-              error.requestOptions.path.contains('/api/auth/refresh/');
+              error.requestOptions.path.contains(AppConstants.tokenRefreshPath);
           final alreadyRetried =
               error.requestOptions.extra['__retried'] == true;
 
@@ -57,8 +57,6 @@ class AuthRepository {
               return handler.next(e is DioException ? e : error);
             }
           } else {
-            // IMPORTANT: do NOT auto-logout here.
-            // Let the app decide (e.g., show "Session expired" only if online and refresh truly rejected).
             return handler.next(error);
           }
         },
@@ -67,7 +65,6 @@ class AuthRepository {
   }
 
   Future<bool> _refreshSingleFlight() async {
-    // If a refresh is already running, await it.
     if (_refreshCompleter != null) {
       return _refreshCompleter!.future;
     }
@@ -87,7 +84,6 @@ class AuthRepository {
   }
 
   bool _looksLikeNetworkError(DioException e) {
-    // Covers offline, DNS, timeouts, etc.
     return e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.sendTimeout ||
@@ -95,12 +91,14 @@ class AuthRepository {
   }
 
   Future<bool> _tryRefreshToken() async {
+    print('AUTH: trying refresh...');
+
     final refreshToken = await _storage.read(key: 'refresh_token');
     if (refreshToken == null) return false;
 
     try {
       final response = await _authDio.post(
-        '/api/auth/refresh/',
+        AppConstants.tokenRefreshPath,
         data: {'refresh': refreshToken},
         options: Options(
           // Ensure refresh call itself doesn't get stuck on weird interceptors
@@ -114,21 +112,18 @@ class AuthRepository {
       if (newAccessToken == null) return false;
 
       await _storage.write(key: 'access_token', value: newAccessToken);
-
-      // If the API rotates refresh tokens, persist the new one.
       if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
         await _storage.write(key: 'refresh_token', value: newRefreshToken);
       }
+      print('AUTH: refresh success. ');
 
       return true;
     } on DioException catch (e) {
-      // Offline / temporary network issue: DO NOT logout; keep tokens and retry later.
+      print('AUTH: refresh failed: $e');
       if (_looksLikeNetworkError(e)) {
         return false;
       }
 
-      // If server explicitly rejects refresh token (e.g., 401/403), treat as invalid session.
-      // You can choose to logout here OR signal to UI.
       final status = e.response?.statusCode;
       if (status == 401 || status == 403) {
         // optional: await logout();
@@ -146,7 +141,7 @@ class AuthRepository {
     required String password,
   }) async {
     final response = await _authDio.post(
-      '/api/auth/login/',
+      AppConstants.loginPath,
       data: {'email': email, 'password': password},
     );
 
@@ -170,8 +165,6 @@ class AuthRepository {
     if (token == null) return null;
 
     if (!JwtDecoder.isExpired(token)) return token;
-
-    // Token expired. Try refresh; if offline, it will fail and we return null.
     final refreshed = await _refreshSingleFlight();
     if (!refreshed) return null;
 
@@ -209,5 +202,17 @@ class AuthRepository {
 
   Future<Response> delete(String path, {dynamic data}) {
     return _dio.delete(path, data: data);
+  }
+
+  Future<String?> getStoredUserIdAllowingExpired() async {
+    try {
+      final token = await _storage.read(key: 'access_token');
+      if (token == null) return null;
+
+      final decodedToken = JwtDecoder.decode(token);
+      return decodedToken['user_id']?.toString();
+    } catch (_) {
+      return null;
+    }
   }
 }
