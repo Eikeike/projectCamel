@@ -17,9 +17,9 @@ typedef enum {
     STATE_IDLE,
     STATE_READY,
     STATE_RUNNING,
-    STATE_ERROR,
     STATE_SENDING,
     STATE_CALIBRATING,
+    STATE_ERROR,
     STATE_MAX
 } StateID_t;
 
@@ -74,5 +74,8 @@ typedef struct {
 
 
 uint8_t state_machine_transition(StateMachine_t *stateMachine, StateID_t targetState);
+
+typedef void (*StateNotifier)(StateID_t);
+void state_machine_register_notifier(StateNotifier notifier);
 
 #endif //STATEMACHINE_H

@@ -53,6 +53,10 @@ int main(void)
 	init_gpio_outputs();
     init_memory_nv();
 	init_ble(TIMER_TICK_DURATION_US);
+    /*register callbacks and handlers*/
+    ble_register_state_input_handler(ble_remote_state_dispatch);
+    state_machine_register_notifier(ble_state_notifier);
+
 	fsm_start();
     on_trichter_startup();
 
