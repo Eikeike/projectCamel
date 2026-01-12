@@ -67,9 +67,8 @@ class BluetoothSettingsTile extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerLow,
+                        color:
+                            Theme.of(context).colorScheme.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
@@ -90,7 +89,9 @@ class BluetoothSettingsTile extends ConsumerWidget {
                           ),
                           TextButton(
                             onPressed: () {
-                              ref.read(trichterConnectionProvider.notifier).disconnect();
+                              ref
+                                  .read(trichterConnectionProvider.notifier)
+                                  .disconnect();
                               Navigator.pop(context);
                             },
                             child: const Text("Trennen"),
@@ -110,7 +111,6 @@ class BluetoothSettingsTile extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     if (scanState.isScanning) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -123,7 +123,6 @@ class BluetoothSettingsTile extends ConsumerWidget {
                     ] else ...[
                       const SizedBox(height: 18),
                     ],
-
                     if (devices.isEmpty && !scanState.isScanning)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 32),
@@ -134,14 +133,12 @@ class BluetoothSettingsTile extends ConsumerWidget {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: devices.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 2),
+                        separatorBuilder: (_, __) => const SizedBox(height: 2),
                         itemBuilder: (context, index) {
                           final result = devices[index];
-                          final deviceName =
-                              result.device.platformName.isEmpty
-                                  ? "Unbekannter Trichter"
-                                  : result.device.platformName;
+                          final deviceName = result.device.platformName.isEmpty
+                              ? "Unbekannter Trichter"
+                              : result.device.platformName;
 
                           final isFirst = index == 0;
                           final isLast = index == devices.length - 1;
@@ -167,14 +164,13 @@ class BluetoothSettingsTile extends ConsumerWidget {
                               child: InkWell(
                                 borderRadius: borderRadius,
                                 onTap: () async {
-                                  final scanNotifier = ref.read(
-                                      trichterScanProvider.notifier);
+                                  final scanNotifier =
+                                      ref.read(trichterScanProvider.notifier);
                                   final connectionNotifier = ref.read(
                                       trichterConnectionProvider.notifier);
 
                                   await scanNotifier.stopScan();
-                                  connectionNotifier
-                                      .connect(result.device);
+                                  connectionNotifier.connect(result.device);
 
                                   if (context.mounted) {
                                     Navigator.pop(context);
@@ -244,8 +240,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: scanState.isBluetoothEnabled
-            ? () => _showBluetoothBottomSheet(
-                context, ref, connectionState)
+            ? () => _showBluetoothBottomSheet(context, ref, connectionState)
             : () => _showDisabledSnackBar(context),
         child: Container(
           padding: const EdgeInsets.all(12),
@@ -262,9 +257,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(14),
                   color: scanState.isBluetoothEnabled
                       ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest,
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
                 child: Icon(
                   scanState.isBluetoothEnabled
@@ -291,8 +284,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     Text(
-                      _getBluetoothConnectionText(
-                          connectionState, scanState),
+                      _getBluetoothConnectionText(connectionState, scanState),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -339,7 +331,9 @@ class BluetoothSettingsTile extends ConsumerWidget {
         content: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.bluetooth_disabled, size: 18, color: Theme.of(context).colorScheme.onInverseSurface),
+            Icon(Icons.bluetooth_disabled,
+                size: 18,
+                color: Theme.of(context).colorScheme.onInverseSurface),
             SizedBox(width: 10),
             Text('Bluetooth aktivieren'),
           ],

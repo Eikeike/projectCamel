@@ -1,50 +1,74 @@
 import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/constants.dart';
 
-/// Status der Bluetooth-Verbindung für das UI
+// ==========================================
+// STATE DEFINITIONS
+// ==========================================
+
+/// Status der Bluetooth-Verbindung (Physisch)
 enum TrichterConnectionStatus { disconnected, connecting, connected, error }
+
+/// Logischer Status des Geräts (Fachlich)
+enum TrichterDeviceStatus {
+  unknown,
+  idle, // 0x00
+  ready, // 0x01
+  running, // 0x02
+  sending, // 0x03
+  calibrating, // 0x04
+  error // 0x05
+}
 
 class TrichterConnectionState {
   final BluetoothDevice? connectedDevice;
   final TrichterConnectionStatus status;
+  final TrichterDeviceStatus deviceStatus; // Neuer Hardware-Status
   final String? error;
 
   TrichterConnectionState({
     this.connectedDevice,
     this.status = TrichterConnectionStatus.disconnected,
+    this.deviceStatus = TrichterDeviceStatus.unknown,
     this.error,
   });
 
   TrichterConnectionState copyWith({
     BluetoothDevice? connectedDevice,
     TrichterConnectionStatus? status,
+    TrichterDeviceStatus? deviceStatus,
     String? error,
   }) {
     return TrichterConnectionState(
       connectedDevice: connectedDevice ?? this.connectedDevice,
       status: status ?? this.status,
-      error: error, // Error wird bei Bedarf überschrieben
+      deviceStatus: deviceStatus ?? this.deviceStatus,
+      error: error,
     );
   }
 }
 
+// ==========================================
+// SERVICE IMPLEMENTATION
+// ==========================================
+
 class TrichterConnectionService extends Notifier<TrichterConnectionState> {
   StreamSubscription? _connectionStateSubscription;
+  StreamSubscription? _statusSubscription;
+  BluetoothCharacteristic? _statusCharacteristic;
 
   @override
   TrichterConnectionState build() {
-    // Cleanup wenn der Provider nicht mehr gebraucht wird
     ref.onDispose(() {
       _connectionStateSubscription?.cancel();
+      _statusSubscription?.cancel();
     });
-
     return TrichterConnectionState();
   }
 
-  /// Startet den Verbindungsaufbau zu einem Trichter
+  /// Startet den Verbindungsaufbau
   Future<void> connect(BluetoothDevice device) async {
-    // Verhindere mehrfache Klicks während bereits verbunden wird
     if (state.status == TrichterConnectionStatus.connecting ||
         state.status == TrichterConnectionStatus.connected) return;
 
@@ -52,16 +76,15 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
         status: TrichterConnectionStatus.connecting, error: null);
 
     try {
-      // Verbindung zur Hardware aufbauen
-      // autoConnect: false -> Schnellerer Timeout/Fehlermeldung
+      // 1. Physisch verbinden
       await device.connect(
           timeout: const Duration(seconds: 10),
           autoConnect: false,
           license: License.free);
-          
+
       if (!ref.mounted) return;
 
-      // Status-Listener: Falls das Gerät außer Reichweite geht oder ausgeschaltet wird
+      // 2. Listener für Disconnects
       _connectionStateSubscription?.cancel();
       _connectionStateSubscription =
           device.connectionState.listen((connectionStatus) {
@@ -69,6 +92,9 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
           _handleDisconnect();
         }
       });
+
+      // 3. Setup State Machine (Services & Characteristics)
+      await _setupStateMachine(device);
 
       state = state.copyWith(
         connectedDevice: device,
@@ -79,6 +105,10 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
         status: TrichterConnectionStatus.error,
         error: "Verbindung fehlgeschlagen: $e",
       );
+      // Clean disconnect attempt
+      try {
+        await device.disconnect();
+      } catch (_) {}
     }
   }
 
@@ -92,17 +122,126 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
     _handleDisconnect();
   }
 
+  /// Sendet einen Status-Wechsel-Wunsch an das Gerät
+  /// Mappt den logischen Status auf das korrekte Command-Byte
+  Future<void> requestState(TrichterDeviceStatus targetStatus) async {
+    if (state.status != TrichterConnectionStatus.connected ||
+        _statusCharacteristic == null) {
+      state = state.copyWith(
+          error: "Nicht verbunden oder Status-Kanal nicht bereit.");
+      return;
+    }
+
+    int commandByte;
+
+    // Asymmetrisches Mapping: Request -> Byte
+    switch (targetStatus) {
+      case TrichterDeviceStatus.idle:
+        commandByte = BleConstants.cmdSetIdle; // 0x00
+        break;
+      case TrichterDeviceStatus.ready:
+        commandByte = BleConstants.cmdSetReady; // 0x01
+        break;
+      case TrichterDeviceStatus.calibrating:
+        commandByte = BleConstants.cmdCalibrate; // 0x02
+        break;
+      default:
+        state = state.copyWith(
+            error: "Dieser Status kann nicht angefordert werden.");
+        return;
+    }
+
+    try {
+      await _statusCharacteristic!.write([commandByte], withoutResponse: false);
+    } catch (e) {
+      state = state.copyWith(error: "Fehler beim Senden des Befehls: $e");
+    }
+  }
+
+  // --- Private Helpers ---
+
   void _handleDisconnect() {
     _connectionStateSubscription?.cancel();
+    _statusSubscription?.cancel();
+    _statusCharacteristic = null;
+
     if (ref.mounted) {
       state = TrichterConnectionState(
           status: TrichterConnectionStatus.disconnected);
     }
   }
+
+  Future<void> _setupStateMachine(BluetoothDevice device) async {
+    // Services entdecken (wichtig für Android)
+    List<BluetoothService> services = await device.discoverServices();
+
+    // Service suchen
+    final service = services.firstWhere(
+      (s) => s.uuid.toString().toLowerCase() == BleConstants.serviceUuid,
+      orElse: () => throw "Service nicht gefunden",
+    );
+
+    // Characteristic suchen
+    // Annahme: Es gibt eine eigene Status-Char. Falls Status über "Session" läuft,
+    // hier BleConstants.sessionUuid verwenden.
+    _statusCharacteristic = service.characteristics.firstWhere(
+      (c) => c.uuid.toString().toLowerCase() == BleConstants.statusUuid,
+      orElse: () => throw "Status Characteristic nicht gefunden",
+    );
+
+    // Notifications aktivieren
+    if (_statusCharacteristic!.properties.notify) {
+      await _statusCharacteristic!.setNotifyValue(true);
+      _statusSubscription =
+          _statusCharacteristic!.lastValueStream.listen(_onDeviceStateChanged);
+    }
+
+    // Optional: Initialen Status lesen
+    if (_statusCharacteristic!.properties.read) {
+      try {
+        List<int> val = await _statusCharacteristic!.read();
+        if (val.isNotEmpty) _onDeviceStateChanged(val);
+      } catch (_) {}
+    }
+  }
+
+  /// Verarbeitet eingehende Bytes vom Gerät und setzt den UI Status
+  void _onDeviceStateChanged(List<int> value) {
+    if (value.isEmpty) return;
+
+    int byte = value[0];
+    TrichterDeviceStatus newStatus;
+
+    // Mapping: Byte -> Status
+    switch (byte) {
+      case BleConstants.stateIdle: // 0x00
+        newStatus = TrichterDeviceStatus.idle;
+        break;
+      case BleConstants.stateReady: // 0x01
+        newStatus = TrichterDeviceStatus.ready;
+        break;
+      case BleConstants.stateRunning: // 0x02
+        newStatus = TrichterDeviceStatus.running;
+        break;
+      case BleConstants.stateSending: // 0x03
+        newStatus = TrichterDeviceStatus.sending;
+        break;
+      case BleConstants.stateCalibrating: // 0x04
+        newStatus = TrichterDeviceStatus.calibrating;
+        break;
+      case BleConstants.stateError: // 0x05
+        newStatus = TrichterDeviceStatus.error;
+        break;
+      default:
+        newStatus = TrichterDeviceStatus.unknown;
+    }
+
+    state = state.copyWith(deviceStatus: newStatus);
+  }
 }
 
-// Hier nutzen wir wieder autoDispose für die Müllabfuhr
-final trichterConnectionProvider = NotifierProvider<
-    TrichterConnectionService, TrichterConnectionState>(() {
+// Provider Definition
+final trichterConnectionProvider =
+    NotifierProvider<TrichterConnectionService, TrichterConnectionState>(() {
   return TrichterConnectionService();
 });

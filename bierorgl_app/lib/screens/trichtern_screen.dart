@@ -107,12 +107,15 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
             // Mittlerer Bereich: Dynamische Status-Anzeige
             Expanded(
               child: Center(
-                child: _buildStatusCircle(context, isConnected, dataState),
+                child: _buildStatusCircle(context, connection, dataState),
               ),
             ),
 
             // Footer-Bereich: Dynamische Texte je nach Zustand
-            _buildFooter(context, isConnected, dataState),
+            _buildFooter(
+              context,
+              connection,
+            ),
           ],
         ),
       ),
@@ -152,89 +155,266 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Status Circle: Zeigt Verbindung, Icon oder Lade-Indikator
-  // ---------------------------------------------------------------------------
+  // Status Circle: Visualisiert alle Hardware-States (Idle, Ready, Running...)
+// ---------------------------------------------------------------------------
   Widget _buildStatusCircle(
-      BuildContext context, bool isConnected, TrichterDataState data) {
+      BuildContext context,
+      TrichterConnectionState connState, // <-- ÄNDERUNG: Ganzes State-Objekt
+      TrichterDataState data) {
     final theme = Theme.of(context);
-    // Farbe wechselt zwischen Blau (Connected) und Rot (Disconnected)
-    final Color statusColor =
-        isConnected ? theme.colorScheme.primary : theme.colorScheme.error;
+    final status = connState.deviceStatus;
+    final isConnected = connState.status == TrichterConnectionStatus.connected;
 
-    // Fortschritt der Datenübertragung berechnen
-    final bool isTransferring = data.progress > 0 && data.progress < 1;
+    // --- 1. Farben & Icons & Text basierend auf State definieren ---
+    Color color;
+    IconData icon;
+    String text;
+    bool showSpinner = false; // Für "Running" oder "Calibrating" ohne Progress
+
+    if (!isConnected) {
+      color = theme.colorScheme.error;
+      icon = Icons.bluetooth_disabled;
+      text = 'Keine Verbindung';
+    } else {
+      switch (status) {
+        case TrichterDeviceStatus.idle:
+          color = Colors.blueGrey;
+          icon = Icons.hourglass_empty;
+          text = 'Warte auf Setup';
+          break;
+        case TrichterDeviceStatus.ready:
+          color = Colors.green;
+          icon = Icons.sports_bar; // Das Bier-Icon!
+          text = 'BEREIT!';
+          break;
+        case TrichterDeviceStatus.running:
+          color = Colors.orange;
+          icon = Icons.timer;
+          text = 'Läuft...';
+          showSpinner = true; // Unbestimmte Wartezeit
+          break;
+        case TrichterDeviceStatus.sending:
+          color = Colors.purple;
+          icon = Icons.cloud_upload;
+          text = 'Empfange Daten...';
+          // Spinner wird unten durch den echten Progress-Bar ersetzt,
+          // wenn data.progress > 0 ist.
+          break;
+        case TrichterDeviceStatus.calibrating:
+          color = Colors.amber;
+          icon = Icons.build;
+          text = 'Kalibriert...';
+          showSpinner = true;
+          break;
+        case TrichterDeviceStatus.error:
+          color = theme.colorScheme.error;
+          icon = Icons.error_outline;
+          text = 'Geräte-Fehler';
+          break;
+        default:
+          color = Colors.grey;
+          icon = Icons.question_mark;
+          text = 'Unbekannt';
+      }
+    }
+
+// Hat der Data-Handler schon Fortschritt gemeldet? (Überschreibt Spinner)
+    final bool isTransferringWithProgress =
+        data.progress > 0 && data.progress < 1;
 
     return Container(
       width: 280,
       height: 280,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: theme.colorScheme.surfaceContainer,
+        color:
+            theme.colorScheme.surfaceContainer, // oder surfaceContainerHighest
         boxShadow: [
           BoxShadow(
-            color: statusColor.withOpacity(0.2),
-            blurRadius: 20,
-            spreadRadius: 10,
+            color: color.withOpacity(0.3), // Schein in der Status-Farbe
+            blurRadius: 25,
+            spreadRadius: 5,
           ),
         ],
-        border: Border.all(color: statusColor, width: 8),
+        border: Border.all(color: color, width: 8),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (isTransferring)
-            // Zeigt einen kreisförmigen Fortschritt während die Ticks reinkommen
+          // A: Echter Daten-Fortschritt (Ladekreis mit %)
+          if (isTransferringWithProgress)
             SizedBox(
               width: 80,
               height: 80,
               child: CircularProgressIndicator(
                 value: data.progress,
                 strokeWidth: 8,
-                color: statusColor,
+                color: color,
+                backgroundColor: color.withOpacity(0.2),
               ),
             )
+          // B: Unbestimmter Ladekreis (z.B. bei Running/Calibrating)
+          else if (showSpinner)
+            SizedBox(
+              width: 80,
+              height: 80,
+              child: CircularProgressIndicator(
+                color: color,
+                strokeWidth: 6,
+              ),
+            )
+          // C: Statisches Icon (Idle, Ready, Error...)
           else
             Icon(
-              isConnected ? Icons.sports_bar : Icons.bluetooth_disabled,
+              icon,
               size: 80,
-              color: statusColor,
+              color: color,
             ),
+
           const SizedBox(height: 20),
+
+          // Text-Anzeige
           Text(
-            !isConnected
-                ? 'Keine Verbindung'
-                : (isTransferring
-                    ? '${(data.progress * 100).toInt()}%'
-                    : 'Bereit'),
+            text,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
+
+          // Optional: Prozentanzeige als Text drunter
+          if (isTransferringWithProgress)
+            Text(
+              "${(data.progress * 100).toInt()}%",
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.bold, fontSize: 16),
+            )
         ],
       ),
     );
   }
 
   // ---------------------------------------------------------------------------
-  // Footer: Status-Text Anweisungen
+// Footer: Dynamische Buttons basierend auf dem Hardware-Status
   // ---------------------------------------------------------------------------
-  Widget _buildFooter(
-      BuildContext context, bool isConnected, TrichterDataState data) {
-    String footerText = "Warte auf ersten Schluck...";
-    if (isConnected) {
-      if (data.progress > 0) {
-        footerText = "Übertrage Messdaten...";
-      } else {
-        footerText = "Nicht vom Schlauch gehen!";
-      }
+  Widget _buildFooter(BuildContext context, TrichterConnectionState state) {
+    // 1. Wenn nicht verbunden: Nichts oder Platzhalter anzeigen
+    if (state.status != TrichterConnectionStatus.connected) {
+      // Optional: Ein kleiner Hinweis, falls du den Platz füllen willst
+      return const SizedBox(
+          height: 120,
+          child: Center(
+            child: Text(
+              "Bitte verbinden, um zu starten",
+              style: TextStyle(color: Colors.grey),
+            ),
+          ));
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 40, left: 30, right: 30),
-      child: Text(
-        footerText,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+    final notifier = ref.read(trichterConnectionProvider.notifier);
+    final status = state.deviceStatus;
+
+    // Wir nutzen AnimatedSwitcher für schöne Übergänge zwischen den Buttons
+    return SizedBox(
+      height: 140, // Genug Platz für Buttons
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: _buildButtonsForStatus(context, status, notifier),
       ),
     );
+  }
+
+  Widget _buildButtonsForStatus(BuildContext context,
+      TrichterDeviceStatus status, TrichterConnectionService notifier) {
+    // Key ist wichtig für die Animation des AnimatedSwitcher
+    switch (status) {
+      // --- FALL A: IDLE (Hauptmenü) ---
+      case TrichterDeviceStatus.idle:
+        return Column(
+          key: const ValueKey('idleButtons'),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 1. Die Haupt-Aktion: FETTER BUTTON
+            SizedBox(
+              width: 250,
+              height: 55,
+              child: ElevatedButton.icon(
+                onPressed: () =>
+                    notifier.requestState(TrichterDeviceStatus.ready),
+                icon: const Icon(Icons.sports_bar, size: 28),
+                label: const Text(
+                  "SCHARF SCHALTEN",
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green, // Signalfarbe
+                  foregroundColor: Colors.white,
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // 2. Die Neben-Aktion: Dezenter Button
+            TextButton.icon(
+              onPressed: () =>
+                  notifier.requestState(TrichterDeviceStatus.calibrating),
+              icon: Icon(Icons.build_circle_outlined,
+                  size: 16, color: Theme.of(context).colorScheme.outline),
+              label: Text(
+                "Sensoren kalibrieren",
+                style: TextStyle(color: Theme.of(context).colorScheme.outline),
+              ),
+            ),
+          ],
+        );
+
+      // --- FALL B: READY (Abbruch möglich) ---
+      case TrichterDeviceStatus.ready:
+        return Column(
+          key: const ValueKey('readyButtons'),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text("Warte auf Bierfluss...",
+                style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
+              icon: const Icon(Icons.close),
+              label: const Text("ABBRECHEN"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                side: const BorderSide(color: Colors.red),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+            ),
+          ],
+        );
+
+      // --- FALL C: ERROR (Reset möglich) ---
+      case TrichterDeviceStatus.error:
+        return Center(
+          key: const ValueKey('errorButtons'),
+          child: ElevatedButton.icon(
+            onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
+            icon: const Icon(Icons.refresh),
+            label: const Text("Fehler zurücksetzen"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+          ),
+        );
+
+      // --- FALL D: RUNNING / SENDING / CALIBRATING (Keine Interaktion) ---
+      default:
+        // Hier zeigen wir keine Buttons, da der User warten muss.
+        // Der Status-Circle in der Mitte gibt genug Feedback.
+        return const SizedBox.shrink(key: ValueKey('empty'));
+    }
   }
 }
