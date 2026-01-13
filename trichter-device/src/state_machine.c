@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include "state_machine.h"
 
+static StateNotifier g_state_notifier;
+
 extern uint8_t IdleEntry(void);
 extern uint8_t IdleRun(void);
 extern uint8_t IdleExit(void);
@@ -124,7 +126,20 @@ uint8_t state_machine_transition(StateMachine_t *stateMachine, StateID_t targetS
         printk("Going to target state %d\n", next->id);
         stateMachine->current = next;
         ret = next->onEntry();
+
+        if ((ret == ERR_NONE || ret == ERR_NO_IMPL) && g_state_notifier != NULL)
+        {
+            g_state_notifier(stateMachine->current->id);
+        }
     }
     return ret;
 }
 
+
+void state_machine_register_notifier(StateNotifier notifier)
+{
+    if (notifier != NULL)
+    {
+        g_state_notifier = notifier;
+    }
+}

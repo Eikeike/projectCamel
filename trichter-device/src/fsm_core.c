@@ -52,9 +52,6 @@ void fsm_main(void *p1, void *p2, void *p3)
         }
         k_msleep(g_stateMachine.period_ms);
     }
-    ARG_UNUSED(p1);
-    ARG_UNUSED(p2);
-    ARG_UNUSED(p3);
 }
 
 

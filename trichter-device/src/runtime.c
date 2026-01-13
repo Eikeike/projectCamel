@@ -27,7 +27,7 @@ static volatile uint16_t g_timestamp_idx_to_write = 0;
 #define TIMER_VALUE_MAX 				0xFFFFFFFF
 
 #define ADV_BLINK_TIME_MS				1500
-#define PRINT_TIMESTAMPS_IN_CONSOLE
+//#define PRINT_TIMESTAMPS_IN_CONSOLE
 
 static uint64_t last_timestamp_blink = 0;
 static uint8_t is_running = false;
@@ -108,7 +108,7 @@ static void sensor_qualification_handler(struct k_work *work)
 }
 
 
-void on_single_click()
+void input_request_state_ready()
 {
 	if (!ble_is_sending())
 	{
@@ -117,14 +117,14 @@ void on_single_click()
 }
 
 
-void on_double_click()
+void input_request_pairing_mode()
 {
 	g_advertise_in_ready = true;
 	ble_delete_active_connection();
 }
 
 
-void on_long_click()
+void input_request_state_calibrating()
 {
 	fsm_transition(STATE_CALIBRATING);
 }
@@ -179,11 +179,33 @@ void timer_reset()
 	printk("Successfully reset timer\n");
 }
 
+
 void on_trichter_startup()
 {
 	g_advertise_in_ready = true;
     fsm_transition_deferred(STATE_READY);
 }
+
+
+void ble_remote_state_dispatch(RemoteState state)
+{
+	if (state >= REMOTE_STATE_CMD_MAX) return;
+	switch (state)
+	{
+		case REMOTE_STATE_CMD_IDLE:
+			fsm_transition_deferred(STATE_IDLE);
+			break;
+		case REMOTE_STATE_CMD_READY:
+			input_request_state_ready();
+			break;
+		case REMOTE_STATE_CMD_CALIB:
+			input_request_state_calibrating();
+			break;
+		default:
+			return;
+	}
+}
+
 
 uint8_t IdleEntry(void)
 {
@@ -194,6 +216,8 @@ uint8_t IdleEntry(void)
 };
 
 uint8_t IdleRun(void) {return ERR_NONE;};
+
+
 uint8_t IdleExit(void)
 {
 	g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
