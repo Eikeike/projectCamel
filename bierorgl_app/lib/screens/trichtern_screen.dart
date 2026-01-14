@@ -183,19 +183,21 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   // ---------------------------------------------------------------------------
   // Status Circle: Visualisiert alle Hardware-States (Idle, Ready, Running...)
 // ---------------------------------------------------------------------------
-  Widget _buildStatusCircle(
-      BuildContext context,
-      TrichterConnectionState connState, // <-- ÄNDERUNG: Ganzes State-Objekt
-      TrichterDataState data) {
+  Widget _buildStatusCircle(BuildContext context,
+      TrichterConnectionState connState, TrichterDataState data) {
     final theme = Theme.of(context);
+
+    // Zum Testen hier hardcoden, später wieder state.deviceStatus nutzen
+    //final status = TrichterDeviceStatus.error;
     final status = connState.deviceStatus;
+
+    // Zum Testen hier hardcoden, später wieder connState.status == TrichterConnectionStatus.connected nutzen
+    //final isConnected = true;
     final isConnected = connState.status == TrichterConnectionStatus.connected;
 
-    // --- 1. Farben & Icons & Text basierend auf State definieren ---
     Color color;
     IconData icon;
     String text;
-    bool showSpinner = false; // Für "Running" oder "Calibrating" ohne Progress
 
     if (!isConnected) {
       color = theme.colorScheme.error;
@@ -204,47 +206,42 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     } else {
       switch (status) {
         case TrichterDeviceStatus.idle:
-          color = Colors.blueGrey;
-          icon = Icons.hourglass_empty;
-          text = 'Warte auf Setup';
+          color = theme.colorScheme.secondary;
+          icon = Icons.nights_stay_rounded;
+          text = 'Warte auf Wakeup';
           break;
         case TrichterDeviceStatus.ready:
-          color = Colors.green;
-          icon = Icons.sports_bar; // Das Bier-Icon!
-          text = 'BEREIT!';
+          color = theme.colorScheme.primary;
+          icon = Icons.sports_bar;
+          text = 'Bereit!';
           break;
         case TrichterDeviceStatus.running:
-          color = Colors.orange;
+          color = theme.colorScheme.tertiary;
           icon = Icons.timer;
           text = 'Läuft...';
-          showSpinner = true; // Unbestimmte Wartezeit
           break;
         case TrichterDeviceStatus.sending:
-          color = Colors.purple;
-          icon = Icons.cloud_upload;
+          color = theme.colorScheme.tertiary;
+          icon = Icons.move_to_inbox_rounded;
           text = 'Empfange Daten...';
-          // Spinner wird unten durch den echten Progress-Bar ersetzt,
-          // wenn data.progress > 0 ist.
           break;
         case TrichterDeviceStatus.calibrating:
-          color = Colors.amber;
-          icon = Icons.build;
-          text = 'Kalibriert...';
-          showSpinner = true;
+          color = theme.colorScheme.tertiary;
+          icon = Icons.build_rounded;
+          text = 'Kalibrieren';
           break;
         case TrichterDeviceStatus.error:
           color = theme.colorScheme.error;
-          icon = Icons.error_outline;
-          text = 'Geräte-Fehler';
+          icon = Icons.warning_amber_rounded;
+          text = 'Gerätefehler';
           break;
         default:
-          color = Colors.grey;
+          color = theme.colorScheme.outline;
           icon = Icons.question_mark;
           text = 'Unbekannt';
       }
     }
 
-// Hat der Data-Handler schon Fortschritt gemeldet? (Überschreibt Spinner)
     final bool isTransferringWithProgress =
         data.progress > 0 && data.progress < 1;
 
@@ -253,11 +250,10 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       height: 280,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color:
-            theme.colorScheme.surfaceContainer, // oder surfaceContainerHighest
+        color: theme.colorScheme.surfaceContainer,
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3), // Schein in der Status-Farbe
+            color: color.withOpacity(0.3),
             blurRadius: 25,
             spreadRadius: 5,
           ),
@@ -267,7 +263,6 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // A: Echter Daten-Fortschritt (Ladekreis mit %)
           if (isTransferringWithProgress)
             SizedBox(
               width: 80,
@@ -279,34 +274,18 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
                 backgroundColor: color.withOpacity(0.2),
               ),
             )
-          // B: Unbestimmter Ladekreis (z.B. bei Running/Calibrating)
-          else if (showSpinner)
-            SizedBox(
-              width: 80,
-              height: 80,
-              child: CircularProgressIndicator(
-                color: color,
-                strokeWidth: 6,
-              ),
-            )
-          // C: Statisches Icon (Idle, Ready, Error...)
           else
             Icon(
               icon,
               size: 80,
               color: color,
             ),
-
           const SizedBox(height: 20),
-
-          // Text-Anzeige
           Text(
             text,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-
-          // Optional: Prozentanzeige als Text drunter
           if (isTransferringWithProgress)
             Text(
               "${(data.progress * 100).toInt()}%",
@@ -322,27 +301,25 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
 // Footer: Dynamische Buttons basierend auf dem Hardware-Status
   // ---------------------------------------------------------------------------
   Widget _buildFooter(BuildContext context, TrichterConnectionState state) {
-    // 1. Wenn nicht verbunden: Nichts oder Platzhalter anzeigen
-    if (state.status != TrichterConnectionStatus.connected) {
-      // Optional: Ein kleiner Hinweis, falls du den Platz füllen willst
-      return const SizedBox(
-          height: 120,
-          child: Center(
-            child: Text(
-              "Bitte verbinden, um zu starten",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ));
-    }
+    // if (state.status != TrichterConnectionStatus.connected) {
+    //   return const SizedBox.shrink();
+    // }
 
     final notifier = ref.read(trichterConnectionProvider.notifier);
+    // Zum Testen hier hardcoden, später wieder state.deviceStatus nutzen:
+    //final status = TrichterDeviceStatus.error;
     final status = state.deviceStatus;
 
-    // Wir nutzen AnimatedSwitcher für schöne Übergänge zwischen den Buttons
-    return SizedBox(
-      height: 140, // Genug Platz für Buttons
+    return Padding(
+      padding:
+          const EdgeInsets.fromLTRB(16, 0, 16, 32), // Etwas mehr Platz unten
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 300),
+        // Scale + Fade wirkt moderner und flüssiger
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(scale: animation, child: child),
+        ),
         child: _buildButtonsForStatus(context, status, notifier),
       ),
     );
@@ -350,97 +327,94 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
 
   Widget _buildButtonsForStatus(BuildContext context,
       TrichterDeviceStatus status, TrichterConnectionService notifier) {
-    // Key ist wichtig für die Animation des AnimatedSwitcher
+    // M3 Style Helper: Macht die Buttons höher (56dp) für bessere Haptik
+    final buttonStyle = FilledButton.styleFrom(
+      minimumSize: const Size.fromHeight(56),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    );
+
+    // Helper für das Layout
+    Widget buildRow({
+      required Widget left,
+      required Widget right,
+      required Key key,
+    }) {
+      return Row(
+        key: key,
+        children: [
+          Expanded(child: left),
+          const SizedBox(width: 16), // 16dp ist Standard M3 Gap
+          Expanded(child: right),
+        ],
+      );
+    }
+
     switch (status) {
-      // --- FALL A: IDLE (Hauptmenü) ---
+      // --- FALL A: IDLE (Energiesparmodus) ---
       case TrichterDeviceStatus.idle:
-        return Column(
-          key: const ValueKey('idleButtons'),
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // 1. Die Haupt-Aktion: FETTER BUTTON
-            SizedBox(
-              width: 250,
-              height: 55,
-              child: ElevatedButton.icon(
-                onPressed: () =>
-                    notifier.requestState(TrichterDeviceStatus.ready),
-                icon: const Icon(Icons.sports_bar, size: 28),
-                label: const Text(
-                  "SCHARF SCHALTEN",
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green, // Signalfarbe
-                  foregroundColor: Colors.white,
-                  elevation: 6,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // 2. Die Neben-Aktion: Dezenter Button
-            TextButton.icon(
-              onPressed: () =>
-                  notifier.requestState(TrichterDeviceStatus.calibrating),
-              icon: Icon(Icons.build_circle_outlined,
-                  size: 16, color: Theme.of(context).colorScheme.outline),
-              label: Text(
-                "Sensoren kalibrieren",
-                style: TextStyle(color: Theme.of(context).colorScheme.outline),
-              ),
-            ),
-          ],
-        );
-
-      // --- FALL B: READY (Abbruch möglich) ---
-      case TrichterDeviceStatus.ready:
-        return Column(
-          key: const ValueKey('readyButtons'),
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text("Warte auf Bierfluss...",
-                style: TextStyle(fontWeight: FontWeight.w500)),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
-              icon: const Icon(Icons.close),
-              label: const Text("ABBRECHEN"),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: const BorderSide(color: Colors.red),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              ),
-            ),
-          ],
-        );
-
-      // --- FALL C: ERROR (Reset möglich) ---
-      case TrichterDeviceStatus.error:
-        return Center(
-          key: const ValueKey('errorButtons'),
-          child: ElevatedButton.icon(
-            onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
-            icon: const Icon(Icons.refresh),
-            label: const Text("Fehler zurücksetzen"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
+        return buildRow(
+          key: const ValueKey('idle'),
+          // Links: Kalibrieren
+          left: FilledButton.tonalIcon(
+            style: buttonStyle,
+            onPressed: () =>
+                notifier.requestState(TrichterDeviceStatus.calibrating),
+            icon: const Icon(
+                Icons.build_rounded), // Tune passt besser zu "Kalibrieren"
+            label: const Text("Kalibrieren"),
+          ),
+          // Rechts: Aufwecken (Hauptaktion)
+          right: FilledButton.icon(
+            style: buttonStyle,
+            onPressed: () => notifier.requestState(TrichterDeviceStatus.ready),
+            icon: const Icon(Icons.power_settings_new),
+            label: const Text("Aufwecken"),
           ),
         );
 
-      // --- FALL D: RUNNING / SENDING / CALIBRATING (Keine Interaktion) ---
+      // --- FALL B: CALIBRATE (Einstellen) ---
+      case TrichterDeviceStatus.calibrating:
+        return buildRow(
+          key: const ValueKey('calib'),
+          // Links: Abbruch -> Standby
+          left: OutlinedButton.icon(
+            style: buttonStyle, // Auch Outlined bekommt die Höhe
+            onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
+            icon: const Icon(Icons.nights_stay_rounded),
+            label: const Text("Standby"),
+          ),
+          // Rechts: Übernehmen -> Starten
+          right: FilledButton.icon(
+            style: buttonStyle,
+            onPressed: () => notifier.requestState(TrichterDeviceStatus.ready),
+            icon: const Icon(Icons.check), // Haken für "Fertig/Übernehmen"
+            label: const Text("Fertig"),
+          ),
+        );
+
+      // --- FALL C: READY (Scharf geschaltet) ---
+      case TrichterDeviceStatus.ready:
+        return buildRow(
+          key: const ValueKey('ready'),
+          // Links: Standby
+          left: OutlinedButton.icon(
+            style: buttonStyle,
+            onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
+            icon: const Icon(Icons.nights_stay_rounded),
+            label: const Text("Standby"),
+          ),
+          // Rechts: Kalibrieren
+          right: FilledButton.tonalIcon(
+            style: buttonStyle,
+            onPressed: () =>
+                notifier.requestState(TrichterDeviceStatus.calibrating),
+            icon: const Icon(Icons.build_rounded),
+            label: const Text("Kalibrieren"),
+          ),
+        );
+
       default:
-        // Hier zeigen wir keine Buttons, da der User warten muss.
-        // Der Status-Circle in der Mitte gibt genug Feedback.
-        return const SizedBox.shrink(key: ValueKey('empty'));
+        return const SizedBox.shrink();
     }
   }
 }
