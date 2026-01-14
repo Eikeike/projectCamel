@@ -58,8 +58,11 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
   StreamSubscription? _statusSubscription;
   BluetoothCharacteristic? _statusCharacteristic;
 
+  bool _stateMachineInitialized = false;
+
   @override
   TrichterConnectionState build() {
+    ref.keepAlive();
     ref.onDispose(() {
       _connectionStateSubscription?.cancel();
       _statusSubscription?.cancel();
@@ -172,6 +175,10 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
   }
 
   Future<void> _setupStateMachine(BluetoothDevice device) async {
+
+     if (_stateMachineInitialized) return;
+    _stateMachineInitialized = true;
+
     // Services entdecken (wichtig für Android)
     List<BluetoothService> services = await device.discoverServices();
 
@@ -237,6 +244,39 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
     }
 
     state = state.copyWith(deviceStatus: newStatus);
+  }
+
+  /// Reads the current device state once from the status characteristic
+  /// and updates the UI state immediately.
+  ///
+  /// Safe to call:
+  /// - after returning to a screen
+  /// - after reconnect
+  /// - if notifications were missed
+  Future<void> queryCurrentDeviceState() async {
+    // Must be connected and characteristic must exist
+    if (state.status != TrichterConnectionStatus.connected ||
+        _statusCharacteristic == null) {
+      return;
+    }
+
+    // Characteristic must support READ
+    if (!_statusCharacteristic!.properties.read) {
+      return;
+    }
+
+    try {
+      final List<int> value = await _statusCharacteristic!.read();
+
+      if (value.isNotEmpty) {
+        _onDeviceStateChanged(value);
+      }
+    } catch (e) {
+      // Non-fatal: UI will recover on next notify
+      state = state.copyWith(
+        error: "Status konnte nicht gelesen werden: $e",
+      );
+    }
   }
 }
 

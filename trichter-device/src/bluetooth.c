@@ -195,30 +195,30 @@ static ssize_t read_time_constant(struct bt_conn *conn,
 
 /* Define custom service */
 BT_GATT_SERVICE_DEFINE(custom_svc,
-    BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),
+    BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),                                          /*Index 0*/
     /* Drinking Speed Characteristic */
-    BT_GATT_CHARACTERISTIC(&drinking_char_uuid.uuid,
+    BT_GATT_CHARACTERISTIC(&drinking_char_uuid.uuid,                                        /*Index 1-2 (2 is the value)*/
                            BT_GATT_CHRC_INDICATE,
                            BT_GATT_PERM_NONE ,
                            NULL, NULL, NULL),
-    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),                              /*Index 3*/
 
     /* Time Calibration characteristic */
-    BT_GATT_CHARACTERISTIC(&time_constant_char_uuid.uuid,
+    BT_GATT_CHARACTERISTIC(&time_constant_char_uuid.uuid,                                   /*Index 4-5 (5 is the value)*/
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                            BT_GATT_PERM_READ,
                            read_time_constant, NULL, NULL),
-        BT_GATT_DESCRIPTOR(&drinking_char_uuid.uuid,
+        BT_GATT_DESCRIPTOR(&drinking_char_uuid.uuid,                                        /*Index 6*/
                        BT_GATT_PERM_READ,
                        read_custom, NULL,
                        "Drinking Speed Service"),
-        BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+        BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),                          /*Index 7*/
     /* Remote State Characteristic*/
-    BT_GATT_CHARACTERISTIC(&remote_state_char_uuid.uuid,
+    BT_GATT_CHARACTERISTIC(&remote_state_char_uuid.uuid,                                    /*Index 8-9 (9 is the value)*/
                            BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
                            BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
                            read_remote_state, write_remote_state, &g_remote_state),
-    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
+    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)                               /*Index 10*/
 );
 
 
@@ -246,7 +246,7 @@ void ble_state_notifier(StateID_t state)
     }
 
     bt_gatt_notify(g_bulk_service.current_conn,
-                   &custom_svc.attrs[6],
+                   &custom_svc.attrs[9],
                    &g_remote_state,
                    sizeof(g_remote_state));
 }

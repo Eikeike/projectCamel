@@ -40,7 +40,7 @@ abstract class BleConstants {
   static const calibUuid = "23de2cad-0fc8-49f4-bbcc-5eb2c9fdb91b";
 
   // UUID für State Machine
-  static const statusUuid = "DEINE-STATUS-CHARACTERISTIC-UUID";
+  static const statusUuid = "9b6d1c3a-91a2-4f23-8c11-1a2b3c4d5e6f";
 
   // --- Protokoll (Data Handler) ---
   static const flagStart = 0xAA;
