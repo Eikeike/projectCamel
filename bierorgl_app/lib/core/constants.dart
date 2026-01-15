@@ -32,18 +32,37 @@ enum SyncStatus {
 }
 
 abstract class BleConstants {
-  // UUIDs
+  // --- UUIDs ---
   static const serviceUuid = "af56d6dd-3c39-4d67-9bbe-4fb04fa327cc";
+
+  // UUID für Messdaten
   static const sessionUuid = "f9d76937-bd70-4e4f-a4da-0b718d5f5b6d";
+
+  // UUID für Kalibrierungswerte
   static const calibUuid = "23de2cad-0fc8-49f4-bbcc-5eb2c9fdb91b";
 
-  // Protokoll
+  // UUID für State Machine
+  static const statusUuid = "9b6d1c3a-91a2-4f23-8c11-1a2b3c4d5e6f";
+
+  // --- Protokoll (Data Handler) ---
   static const flagStart = 0xAA;
   static const flagData = 0xBB;
   static const flagEnd = 0xCC;
 
-  // Header Offsets
   static const headerSize = 4;
-  static const offsetCount = 4; // Start-Paket Count
-  static const offsetVolFactor = 6; // Start-Paket VolFactor
+  static const offsetCount = 4;
+  static const offsetVolFactor = 6;
+
+  // --- State Machine: VOM GERÄT GEMELDET (Read/Notify) ---
+  static const int stateIdle = 0x00;
+  static const int stateReady = 0x01;
+  static const int stateRunning = 0x02;
+  static const int stateSending = 0x03;
+  static const int stateCalibrating = 0x04;
+  static const int stateError = 0x05;
+
+  // --- State Machine: ANFRAGE VOM HANDY (Write) ---
+  static const int cmdSetIdle = 0x00;
+  static const int cmdSetReady = 0x01;
+  static const int cmdCalibrate = 0x02;
 }

@@ -1,0 +1,72 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0" version="29.2.4">
+  <diagram name="Seite-1" id="lh6gjoVSTx2Jlcgo-H-x">
+    <mxGraphModel dx="1610" dy="1096" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=default;fontSize=15;fontStyle=1" value="Mobile" vertex="1">
+          <mxGeometry height="370" width="270" x="-131" y="296" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=default;fontSize=15;fontStyle=1" value="Trichter" vertex="1">
+          <mxGeometry height="370" width="490" x="299" y="296" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-7" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="gYni4ZyHnNaRoFTc-6Yg-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="REMOTE_STATE_CMD_IDLE: 0" vertex="1">
+          <mxGeometry height="60" width="205" x="-101" y="356" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-8" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="gYni4ZyHnNaRoFTc-6Yg-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="REMOTE_STATE_CMD_READY: 1" vertex="1">
+          <mxGeometry height="60" width="205" x="-101" y="426" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-9" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="gYni4ZyHnNaRoFTc-6Yg-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="REMOTE_STATE_CMD_CALIB: 2" vertex="1">
+          <mxGeometry height="60" width="205" x="-101" y="496" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-12" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="gYni4ZyHnNaRoFTc-6Yg-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="State Dispatcher" vertex="1">
+          <mxGeometry height="60" width="205" x="321.5" y="356" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Trichter observer" vertex="1">
+          <mxGeometry height="60" width="205" x="-98.5" y="586" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-15" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="gYni4ZyHnNaRoFTc-6Yg-10">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="424" y="616" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="State Machine" vertex="1">
+          <mxGeometry height="60" width="205" x="321.5" y="446" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-14" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="gYni4ZyHnNaRoFTc-6Yg-11">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="672" y="476" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Internal Events" vertex="1">
+          <mxGeometry height="60" width="205" x="569" y="356" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-16" parent="1" style="whiteSpace=wrap;html=1;shape=mxgraph.basic.document;align=left;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;div align=&quot;left&quot;&gt;&amp;nbsp; &amp;nbsp; STATE_IDLE: &lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;/span&gt;0&lt;br&gt;&amp;nbsp; &amp;nbsp; STATE_READY: &lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;1&lt;br&gt;&amp;nbsp; &amp;nbsp; STATE_RUNNING: &lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;/span&gt;2&lt;br&gt;&amp;nbsp; &amp;nbsp; STATE_SENDING: &lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;3&lt;br&gt;&amp;nbsp; &amp;nbsp; STATE_CALIBRATING: &lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;4&lt;br&gt;&amp;nbsp; &amp;nbsp; STATE_ERROR: &lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;&lt;/span&gt;&lt;span style=&quot;white-space: pre;&quot;&gt;&#x9;5&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="100" width="220" x="499" y="526" as="geometry" />
+        </mxCell>
+        <mxCell id="gYni4ZyHnNaRoFTc-6Yg-19" edge="1" parent="1" source="gYni4ZyHnNaRoFTc-6Yg-11" style="endArrow=none;html=1;rounded=0;exitX=0.968;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;entryPerimeter=0;" target="gYni4ZyHnNaRoFTc-6Yg-16" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="349" y="836" as="sourcePoint" />
+            <mxPoint x="399" y="786" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

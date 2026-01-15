@@ -4,6 +4,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <stdint.h>
+#include "bluetooth.h"
 
 #define TIMER_FREQUENCY_HZ				125000
 #define TIMER_TICK_DURATION_US			8
@@ -18,9 +19,10 @@ void init_gpio_outputs();
 
 uint8_t init_gpio_inputs();
 
-void on_single_click();
-void on_double_click();
-void on_long_click();
+void input_request_state_ready();
+void input_request_pairing_mode();
+void input_request_state_calibrating();
+void ble_remote_state_dispatch(RemoteState state);
 
 void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, unsigned int pins);
 void ble_delete_active_connection();

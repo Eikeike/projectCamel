@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/auth/auth_providers.dart';
 import '../core/constants.dart';
-import '../core/color_constants.dart'; // Oder wo auch immer deine AppColors sind
+import '../core/color_constants.dart';
 import '../theme/theme_provider.dart';
-// import '../services/auto_sync_controller.dart'; // Einkommentieren wenn nötig
-// import '../auth/application/auth_providers.dart'; // Einkommentieren wenn nötig
+// Importiere den neuen Provider hier (Pfad ggf. anpassen):
+import '../services/secret_settings_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -15,15 +15,18 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  // --- LOKALER STATE FÜR DAS EASTER EGG ---
+  // --- LOKALER STATE ---
+  // Dieser Zähler bleibt lokal, da er nur für die aktuelle Session relevant ist
   int _easterEggTapCount = 0;
-  bool _isSecretMenuVisible = false; // Wird true nach 7 Klicks
 
-  // Platzhalter für Biermodus (lokal, da noch kein Provider existiert)
+  // Platzhalter für Biermodus
   bool _tempBeerMode = false;
 
   void _handleVersionTap() {
-    if (_isSecretMenuVisible) return; // Bereits freigeschaltet
+    // 1. Status aus dem neuen Notifier lesen
+    final isUnlocked = ref.read(secretSettingsProvider);
+
+    if (isUnlocked) return; // Bereits freigeschaltet, nichts tun
 
     setState(() {
       _easterEggTapCount++;
@@ -32,7 +35,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Feedback zwischen 3 und 7 Klicks
     if (_easterEggTapCount >= 3 && _easterEggTapCount < 7) {
       final remaining = 7 - _easterEggTapCount;
-      ScaffoldMessenger.of(context).clearSnackBars(); // Alte ausblenden
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -49,13 +52,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // Freischaltung
     if (_easterEggTapCount >= 7) {
-      setState(() {
-        _isSecretMenuVisible = true;
-      });
+      // 2. UNLOCK AUFRUFEN (über den Notifier)
+      ref.read(secretSettingsProvider.notifier).unlock();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Geheime Optionen freigeschaltet!',
+            'Geheime Optionen dauerhaft freigeschaltet!',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onPrimary,
             ),
@@ -69,17 +72,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. THEME STATE
+    // THEME STATE
     final themeState = ref.watch(themeProvider);
     final currentMode = themeState.mode;
     final bool useSystem = currentMode == ThemeMode.system;
+
+    // --- NEU: HIER DEN STATUS WATCHEN ---
+    final bool isSecretMenuVisible = ref.watch(secretSettingsProvider);
 
     // Prüfen für Vorschau: Ist es dunkel?
     final bool isPreviewDark = useSystem
         ? MediaQuery.of(context).platformBrightness == Brightness.dark
         : currentMode == ThemeMode.dark;
 
-    // Theme Optionen aus Constants laden
+    // Theme Optionen laden
     final List<Map<String, dynamic>> themeOptions = AppConstants.themeOptions;
 
     return Scaffold(
@@ -194,7 +200,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     title: const Text('Jetzt synchronisieren'),
                     subtitle: const Text('Daten manuell mit Server abgleichen'),
                     onTap: () {
-                      // PLATZHALTER: Hier passiert aktuell NICHTS.
                       debugPrint("Sync Button gedrückt (Placeholder)");
                     },
                   ),
@@ -215,13 +220,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
 
             // ================================================================
-            // 3. GEHEIME OPTIONEN (EASTER EGG) - Nur sichtbar wenn unlocked
+            // 3. GEHEIME OPTIONEN (EASTER EGG)
             // ================================================================
-            if (_isSecretMenuVisible) ...[
+            // Hier nutzen wir nun die Variable aus dem Provider
+            if (isSecretMenuVisible) ...[
               const SizedBox(height: 32),
               Row(
                 children: [
-                  // Kleines Icon dazu für den "Developer Look"
                   Icon(Icons.build_circle_outlined,
                       color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),
@@ -238,7 +243,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
-                  // Wir nehmen primaryContainer, aber mit leichter Transparenz
                   color: Theme.of(context)
                       .colorScheme
                       .primaryContainer
@@ -261,16 +265,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       secondary: Icon(Icons.history,
                           color: Theme.of(context).colorScheme.primary),
 
-                      // ECHTER WERT AUS DEM PROVIDER
+                      // ECHTER WERT AUS DEM THEME PROVIDER
                       value: themeState.isLegacyMode,
 
                       onChanged: (val) {
-                        // 1. Theme ändern (löst kompletten Rebuild aus)
                         ref.read(themeProvider.notifier).setLegacyMode(val);
-                        debugPrint("Legacy Mode gesetzt auf: $val");
-
-                        // 2. CRASH-FIX: Warten bis Build fertig, dann SnackBar
                         if (val) {
+                          // Post frame callback für die Snackbar
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -286,7 +287,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       },
                     ),
 
-                    // DIVIDER: Angepasst für farbigen Hintergrund
                     Divider(
                         height: 1,
                         indent: 16,
@@ -307,7 +307,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       value: _tempBeerMode,
                       onChanged: (val) {
                         setState(() => _tempBeerMode = val);
-                        debugPrint("Biermodus: $val (Platzhalter)");
                         if (val) {
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text("O'zapft is! 🍻")));
@@ -350,7 +349,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                   // --- APP VERSION TILE MIT EASTER EGG TRIGGER ---
                   InkWell(
-                    onTap: _handleVersionTap, // <--- TRIGGER
+                    onTap: _handleVersionTap,
                     borderRadius: const BorderRadius.only(
                       bottomLeft: Radius.circular(16),
                       bottomRight: Radius.circular(16),
@@ -469,7 +468,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  // --- VORSCHAU WIDGET (CRASH FIX: Material statt Scaffold) ---
+  // --- VORSCHAU WIDGET ---
   Widget _buildRealM3Preview({
     required BuildContext context,
     required String name,
@@ -514,8 +513,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(9),
-                // WICHTIG: Hier nehmen wir Material statt Scaffold!
-                // Das ist performanter und verhindert den Crash beim globalen Theme-Wechsel.
                 child: Material(
                   color: previewScheme.surface,
                   child: Column(

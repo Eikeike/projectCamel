@@ -77,12 +77,12 @@ void debounce_work_handler(struct k_work *work)
         if (!g_ready_button.double_click_pending)
         {
             g_ready_button.double_click_pending = true;
-            on_single_click();
+            input_request_state_ready();
             k_work_schedule(&double_click_debounce_work, K_MSEC(DOUBLE_CLICK_TIMEOUT_MS));
         } else {
             g_ready_button.double_click_pending = false;
             k_work_cancel_delayable(&double_click_debounce_work);
-            on_double_click();
+            input_request_pairing_mode();
         }
     }
 }
@@ -93,7 +93,7 @@ static void long_click_work_handler(struct k_work *work)
     if (1 == g_ready_button.button_level_stable) {
         g_ready_button.long_click_fired = true;
         g_ready_button.double_click_pending = false;
-        on_long_click();
+        input_request_state_calibrating();
     }
 }
 

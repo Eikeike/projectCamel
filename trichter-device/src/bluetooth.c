@@ -10,6 +10,7 @@
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/settings/settings.h>
 #include "bluetooth.h"
+#include "state_machine.h"
 #include "memory.h"
 
 #define MAX_TIMESTAMPS          300
@@ -86,6 +87,8 @@ static struct bulk_data_service g_bulk_service = {
 static struct bt_gatt_indicate_params ind_params;
 static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
 
+static StateID_t g_remote_state;
+
 /* Custom 128-bit UUIDs */
 #define BT_UUID_CUSTOM_SERVICE_VAL \
     BT_UUID_128_ENCODE(0xaf56d6dd, 0x3c39, 0x4d67, 0x9bbe, 0x4fb04fa327cc)
@@ -96,12 +99,59 @@ static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
     BT_UUID_128_ENCODE( 0xf9d76937, 0xbd70, 0x4e4f, 0xa4da, 0x0b718d5f5b6d)
 
 #define BT_UUID_CALIB_CHAR_VAL \
-    BT_UUID_128_ENCODE(0x23de2cad, 0x0fc8, 0x49f4, 0xbbcc, 0x5eb2c9fdb91b)
+BT_UUID_128_ENCODE(0x23de2cad, 0x0fc8, 0x49f4, 0xbbcc, 0x5eb2c9fdb91b)
+
+#define BT_UUID_REMOTE_STATE_CHAR_VAL \
+    BT_UUID_128_ENCODE(0x9b6d1c3a, 0x91a2, 0x4f23, 0x8c11, 0x1a2b3c4d5e6f)
 
 
-static struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_SERVICE_VAL);
+    static struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_SERVICE_VAL);
 static struct bt_uuid_128 drinking_char_uuid = BT_UUID_INIT_128(BT_UUID_ARRAY_CHARACTERISTIC_VAL);
 static struct bt_uuid_128 time_constant_char_uuid = BT_UUID_INIT_128(BT_UUID_CALIB_CHAR_VAL);
+static struct bt_uuid_128 remote_state_char_uuid = BT_UUID_INIT_128(BT_UUID_REMOTE_STATE_CHAR_VAL);
+
+static RemoteStateInputHandler g_remote_input_handler = NULL;
+
+
+void ble_state_notifier(StateID_t state);
+
+
+void ble_register_state_input_handler(RemoteStateInputHandler handler)
+{
+    if (handler != NULL)
+    {
+        g_remote_input_handler = handler;
+    }
+}
+
+
+static ssize_t write_remote_state(struct bt_conn *conn,
+                                  const struct bt_gatt_attr *attr,
+                                  const void *buf, uint16_t len,
+                                  uint16_t offset, uint8_t flags)
+{
+    if (len != sizeof(uint8_t)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    RemoteState state = *(const RemoteState *)buf;
+
+    if (g_remote_input_handler) {
+        g_remote_input_handler(state);
+    }
+
+    return len;
+}
+
+
+static ssize_t read_remote_state(struct bt_conn *conn,
+                                 const struct bt_gatt_attr *attr,
+                                 void *buf, uint16_t len, uint16_t offset)
+{
+    return bt_gatt_attr_read(conn, attr, buf, len, offset,
+                             &g_remote_state, sizeof(g_remote_state));
+}
+
 
 static void indication_retry_handler(struct k_work *work)
 {
@@ -145,26 +195,30 @@ static ssize_t read_time_constant(struct bt_conn *conn,
 
 /* Define custom service */
 BT_GATT_SERVICE_DEFINE(custom_svc,
-    BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),
+    BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),                                          /*Index 0*/
     /* Drinking Speed Characteristic */
-    BT_GATT_CHARACTERISTIC(&drinking_char_uuid.uuid,
+    BT_GATT_CHARACTERISTIC(&drinking_char_uuid.uuid,                                        /*Index 1-2 (2 is the value)*/
                            BT_GATT_CHRC_INDICATE,
                            BT_GATT_PERM_NONE ,
                            NULL, NULL, NULL),
-    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),                              /*Index 3*/
 
     /* Time Calibration characteristic */
-    BT_GATT_CHARACTERISTIC(&time_constant_char_uuid.uuid,
-        BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
-        BT_GATT_PERM_READ,
-        read_time_constant, NULL, NULL),
-    BT_GATT_DESCRIPTOR(&drinking_char_uuid.uuid,
+    BT_GATT_CHARACTERISTIC(&time_constant_char_uuid.uuid,                                   /*Index 4-5 (5 is the value)*/
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ,
+                           read_time_constant, NULL, NULL),
+        BT_GATT_DESCRIPTOR(&drinking_char_uuid.uuid,                                        /*Index 6*/
                        BT_GATT_PERM_READ,
                        read_custom, NULL,
                        "Drinking Speed Service"),
-    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)
-    // Ready Signal einfügen
-    // Start Signal
+        BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),                          /*Index 7*/
+    /* Remote State Characteristic*/
+    BT_GATT_CHARACTERISTIC(&remote_state_char_uuid.uuid,                                    /*Index 8-9 (9 is the value)*/
+                           BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_NOTIFY,
+                           BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+                           read_remote_state, write_remote_state, &g_remote_state),
+    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE)                               /*Index 10*/
 );
 
 
@@ -181,6 +235,23 @@ static const struct bt_data sd[] = {
 BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_CUSTOM_SERVICE_VAL)
 };
  
+
+
+void ble_state_notifier(StateID_t state)
+{
+    g_remote_state = state;
+
+    if (!g_is_connected || !g_bulk_service.current_conn) {
+        return;
+    }
+
+    bt_gatt_notify(g_bulk_service.current_conn,
+                   &custom_svc.attrs[9],
+                   &g_remote_state,
+                   sizeof(g_remote_state));
+}
+
+
 /* Connection callbacks */
 static void connected(struct bt_conn *conn, uint8_t err)
 {
