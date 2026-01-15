@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/models/session.dart';
 import 'package:project_camel/models/event.dart';
 import 'package:project_camel/providers.dart';
-import 'package:project_camel/screens/session_screen.dart';
+import 'package:project_camel/screens/new_session_screen.dart';
 import 'package:project_camel/widgets/pie_chart.dart';
 import 'package:project_camel/widgets/session_list.dart';
 import '../auth/auth_providers.dart';

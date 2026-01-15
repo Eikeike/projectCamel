@@ -5,7 +5,6 @@ import 'package:project_camel/services/auto_sync_controller.dart';
 import 'trichtern_screen.dart';
 import 'leaderboard_screen.dart';
 import 'profile_screen.dart';
-import 'event_screen.dart';
 import 'new_session_screen.dart';
 import 'dart:math' as math;
 
