@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:project_camel/providers.dart';
 import 'package:uuid/uuid.dart';
+import 'package:project_camel/models/session.dart';
+import 'package:project_camel/models/event.dart';
 
 import '../services/session_calculator_service.dart';
 import '../services/session_state_provider.dart';
@@ -11,7 +14,7 @@ import '../widgets/speed_graph.dart';
 import '../widgets/selection_list.dart';
 
 class SessionScreen extends ConsumerStatefulWidget {
-  final Map<String, dynamic>? session;
+  final Session? session;
   final int? durationMS;
   final List<int>? allValues;
   final double? calibrationFactor;
@@ -32,17 +35,38 @@ class SessionScreen extends ConsumerStatefulWidget {
 
 class _SessionScreenState extends ConsumerState<SessionScreen> {
   late final TextEditingController _nameController;
-  final _dbService = SessionDbService();
   Position? _currentPosition;
 
   bool get _isEditing => widget.session != null;
+  bool _isSaving = false;
+
+  int get _effectiveDurationMS =>
+      _isEditing ? (widget.session?.durationMS ?? 0) : (widget.durationMS ?? 0);
+
+  List<int> get _effectiveAllValues {
+    if (_isEditing && widget.session?.valuesJSON != null) {
+      try {
+        final decoded = jsonDecode(widget.session!.valuesJSON!);
+        if (decoded is List) {
+          return List<int>.from(decoded);
+        }
+      } catch (e) {
+        debugPrint('Error decoding valuesJSON: $e');
+      }
+    }
+    return _isEditing ? [] : (widget.allValues ?? []);
+  }
+
+  double get _effectiveCalibrationFactor => _isEditing
+      ? (widget.session?.calibrationFactor?.toDouble() ?? 200.0)
+      : (widget.calibrationFactor ?? 200.0);
 
   @override
   void initState() {
     super.initState();
 
     _nameController = TextEditingController(
-        text: widget.session?['name'] ??
+        text: widget.session?.name ??
             "Trichterung vom ${DateFormat('dd.MM.yyyy HH:mm').format(DateTime.now())}");
 
     // Initialisierung der Daten über den Notifier
@@ -55,9 +79,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
       if (_isEditing) {
         final s = widget.session!;
-        if (s['userID'] != null) notifier.selectUser(s['userID']);
-        if (s['eventID'] != null) notifier.selectEvent(s['eventID']);
-        if (s['volumeML'] != null) notifier.setVolume(s['volumeML']);
+        if (s.userID != null) notifier.selectUser(s.userID!);
+        if (s.eventID != null) notifier.selectEvent(s.eventID!);
+        if (s.volumeML != null) notifier.setVolume(s.volumeML);
       }
     });
 
@@ -97,23 +121,32 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     notifier.setSaving(true);
 
     try {
-      final sessionData = {
-        'sessionID': widget.session?['sessionID'] ?? const Uuid().v4(),
-        'startedAt':
-            widget.session?['startedAt'] ?? DateTime.now().toIso8601String(),
-        'userID': state.selectedUserID,
-        'volumeML': state.selectedVolumeML,
-        'durationMS': widget.session?['durationMS'] ?? widget.durationMS,
-        'eventID': state.selectedEventID,
-        'name': _nameController.text,
-        'latitude': _currentPosition?.latitude ?? 0.0,
-        'longitude': _currentPosition?.longitude ?? 0.0,
-        'valuesJSON':
-            widget.session?['valuesJSON'] ?? jsonEncode(widget.allValues),
-        'calibrationFactor': widget.calibrationFactor?.toInt(),
-      };
+      final session = Session(
+        id: _isEditing ? widget.session!.id : const Uuid().v4(),
+        volumeML: state.selectedVolumeML,
+        name: _nameController.text.isNotEmpty ? _nameController.text : null,
+        description: _isEditing ? widget.session?.description : null,
+        latitude: _isEditing
+            ? (widget.session?.latitude ?? 0.0)
+            : (_currentPosition?.latitude ?? 0.0),
+        longitude: _isEditing
+            ? (widget.session?.longitude ?? 0.0)
+            : (_currentPosition?.longitude ?? 0.0),
+        startedAt: _isEditing ? widget.session!.startedAt : DateTime.now(),
+        userID: state.selectedUserID ?? '',
+        eventID: state.selectedEventID,
+        durationMS: _effectiveDurationMS,
+        valuesJSON: _isEditing
+            ? widget.session?.valuesJSON
+            : (widget.allValues != null ? jsonEncode(widget.allValues) : null),
+        calibrationFactor: _isEditing
+            ? widget.session?.calibrationFactor
+            : widget.calibrationFactor?.toInt(),
+      );
 
-      await _dbService.commitSession(sessionData, _isEditing);
+      await ref
+          .read(sessionRepositoryProvider)
+          .saveSessionForSync(session, isEditing: _isEditing);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -132,13 +165,14 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print(widget.session?.valuesJSON);
     final state = ref.watch(sessionStateProvider);
     final theme = Theme.of(context);
 
     final avgFlow = SessionCalculatorService.calculateAverageFlow(
-        widget.durationMS ?? 0, state.selectedVolumeML);
+        _effectiveDurationMS, state.selectedVolumeML);
     final peakFlow = SessionCalculatorService.calculatePeakFlow(
-        widget.allValues ?? [], widget.calibrationFactor ?? 200.0);
+        _effectiveAllValues, _effectiveCalibrationFactor);
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -153,8 +187,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             _buildStatCarousel(theme, avgFlow, peakFlow),
             const SizedBox(height: 16),
             SessionChart(
-              allValues: widget.allValues ?? [],
-              volumeCalibrationValue: widget.calibrationFactor ?? 1.0,
+              allValues: _effectiveAllValues,
+              volumeCalibrationValue: _effectiveCalibrationFactor,
             ),
             const SizedBox(height: 32),
             UserSelectionField(
@@ -195,7 +229,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     final List<Map<String, String>> stats = [
       {
         'label': 'GESAMTZEIT',
-        'value': '${((widget.durationMS ?? 0) / 1000).toStringAsFixed(2)}s',
+        'value': '${(_effectiveDurationMS / 1000).toStringAsFixed(2)}s',
         'sub': 'Dauer der Session'
       },
       {

@@ -127,6 +127,18 @@ final sessionsByUserIDProvider =
     query: () => repo.getSessionsByUserID(userID),
   );
 });
+
+final sessionsByEventIDProvider =
+    StreamProvider.family<List<Session>, String>((ref, eventID) {
+  final repo = ref.watch(sessionRepositoryProvider);
+  final bus = ref.watch(dbChangeBusProvider);
+
+  return watchQuery<List<Session>>(
+    bus: bus.stream,
+    topic: DbTopic.sessions,
+    query: () => repo.getSessionsByEventID(eventID),
+  );
+});
 // --- Users (list from DB) ---
 final usersProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   final dbHelper = ref.watch(databaseHelperProvider);

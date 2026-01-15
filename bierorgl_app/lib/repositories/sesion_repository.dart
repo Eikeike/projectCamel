@@ -50,6 +50,21 @@ class SessionRepository {
     return rows.map(Session.fromHistoryRow).toList();
   }
 
+  Future<List<Session>> getSessionsByEventID(String eventID) async {
+    final db = await _db.database;
+
+    final rows = await db.rawQuery('''
+      SELECT s.*, e.name AS eventName
+      FROM Session s
+      LEFT JOIN Event e ON s.eventID = e.eventID
+      WHERE s.eventID = ? 
+        AND s.localDeletedAt IS NULL
+      ORDER BY s.startedAt DESC
+    ''', [eventID]);
+
+    return rows.map(Session.fromHistoryRow).toList();
+  }
+
   Future<void> markSessionAsDeleted(String sessionID) async {
     final db = await _db.database;
     final nowIso = DateTime.now().toIso8601String();

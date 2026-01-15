@@ -149,21 +149,22 @@ class SessionChart extends StatelessWidget {
                     borderData: FlBorderData(show: false),
                     lineBarsData: [
                       LineChartBarData(
+                        spots: normalizedVolumeSpots,
+                        isCurved: true,
+                        color: theme.colorScheme.tertiary,
+                        //dashArray: [5, 10],
+                        barWidth: 2,
+                        dotData: const FlDotData(show: false),
+                      ),
+                      LineChartBarData(
                         spots: flowSpots,
                         isCurved: true,
                         color: theme.colorScheme.primary,
-                        barWidth: 4,
+                        barWidth: 3,
                         dotData: const FlDotData(show: false),
                         belowBarData: BarAreaData(
                             show: true,
                             color: theme.colorScheme.primary.withOpacity(0.1)),
-                      ),
-                      LineChartBarData(
-                        spots: normalizedVolumeSpots,
-                        isCurved: true,
-                        color: theme.colorScheme.tertiary,
-                        barWidth: 2,
-                        dotData: const FlDotData(show: false),
                       ),
                     ],
                   ),
