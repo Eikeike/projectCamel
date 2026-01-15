@@ -17,6 +17,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   // ===========================================================================
   // 1. STATE & LISTENER LOGIC
   // ===========================================================================
+  bool _needsStateRefresh = true;
+  bool _shouldForceReadyOnReturn = false;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +27,28 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     // Nutzt Riverpod's Reaktivität statt manueller Timer
     final connection = ref.watch(trichterConnectionProvider);
     final dataState = ref.watch(trichterDataHandlerProvider);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (_needsStateRefresh) {
+      _needsStateRefresh = false;
+
+      ref.read(trichterConnectionProvider.notifier)
+          .queryCurrentDeviceState();
+    }
+    
+    if (_shouldForceReadyOnReturn) {
+      _shouldForceReadyOnReturn = false;
+        final notifier = ref.read(trichterConnectionProvider.notifier);
+        final state = ref.read(trichterConnectionProvider);
+
+        //Force ready when still in sending
+        if (state.deviceStatus == TrichterDeviceStatus.sending ||
+            state.deviceStatus == TrichterDeviceStatus.running) {
+          notifier.requestState(TrichterDeviceStatus.ready);
+        }
+
+    }
+    });
 
     final bool isConnected =
         connection.status == TrichterConnectionStatus.connected;
@@ -72,6 +96,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
             // WICHTIG: Wenn der User zurückkommt, den State für die nächste Messung leeren
             if (mounted) {
               ref.read(trichterDataHandlerProvider.notifier).resetSession();
+              _needsStateRefresh = true;
+              _shouldForceReadyOnReturn = true;
             }
           });
         }
