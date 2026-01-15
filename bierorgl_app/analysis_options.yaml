@@ -23,6 +23,19 @@ linter:
   rules:
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
     # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    prefer_final_locals: true
+    prefer_final_in_for_each: true
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+
+    # Flutter-specific niceties (especially for mobile UIs)
+    use_key_in_widget_constructors: true
+    sort_child_properties_last: true   # keeps `child:` at the bottom of widgets
+    avoid_unnecessary_containers: true
+
+    # Common bug catchers
+    use_build_context_synchronously: true   # catches the classic async/BuildContext bug
+    unawaited_futures: true                 # don’t accidentally drop Futures
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
