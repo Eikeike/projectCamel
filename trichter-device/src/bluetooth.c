@@ -307,6 +307,12 @@ void ble_start_adv()
     int err = 0;
     g_is_connected = 0;
     printk("Advertising started");
+    struct bt_le_adv_param adv_params = {
+        .options = BT_LE_ADV_OPT_CONNECTABLE,
+        .interval_min = 4800,  // 3s (4800*0.625ms)
+        .interval_max = 5200,  // 3.25s
+        .secondary_phy = BT_GAP_LE_PHY_CODED,
+    };
     if (!g_is_advertising)
     {
         err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
