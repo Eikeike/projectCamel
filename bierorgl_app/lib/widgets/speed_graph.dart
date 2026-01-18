@@ -65,7 +65,7 @@ class SessionChart extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             // sideSize etwas verkleinert, um den Graph breiter zu machen
-            const double sideSize = 40.0;
+            const double sideSize = 48.0;
 
             return Padding(
               // Kleineres Padding zum Bildschirmrand
@@ -99,7 +99,7 @@ class SessionChart extends StatelessWidget {
                           getTitlesWidget: (v, m) => SideTitleWidget(
                             axisSide: m.axisSide,
                             space: 4,
-                            child: Text('${v.toStringAsFixed(1)} L/s',
+                            child: Text('${v.toStringAsFixed(2)} L/s',
                                 style: TextStyle(
                                     color: theme.colorScheme.primary,
                                     fontSize: 10,
@@ -208,18 +208,26 @@ class SessionChart extends StatelessWidget {
       touchTooltipData: LineTouchTooltipData(
         getTooltipColor: (spot) => theme.colorScheme.surfaceContainerHigh,
         getTooltipItems: (spots) => spots.map((s) {
-          if (s.barIndex == 0)
+          // FLOW Linie
+          if (s.barIndex == 1) {
             return LineTooltipItem(
-                '${s.y.toStringAsFixed(2)} L/s',
-                TextStyle(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.bold));
+              '${s.y.toStringAsFixed(3)} L/s',
+              TextStyle(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+          }
+
+          // VOLUMEN Linie
           double realVol = (s.y / yLeftMax) * yRightMax;
           return LineTooltipItem(
-              '${realVol.toStringAsFixed(3)} L',
-              TextStyle(
-                  color: theme.colorScheme.tertiary,
-                  fontWeight: FontWeight.bold));
+            '${realVol.toStringAsFixed(3)} L',
+            TextStyle(
+              color: theme.colorScheme.tertiary,
+              fontWeight: FontWeight.bold,
+            ),
+          );
         }).toList(),
       ),
     );

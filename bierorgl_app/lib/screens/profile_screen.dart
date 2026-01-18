@@ -9,6 +9,118 @@ import 'package:project_camel/widgets/session_list.dart';
 import '../auth/auth_providers.dart';
 import 'settings_screen.dart';
 
+// ===========================================================================
+// DATA OBJECT FOR VIEW STATS (Optimierung: Trennung von Logik & UI)
+// ===========================================================================
+class _ProfileViewStats {
+  final int count;
+  final double totalVolumeL;
+  final String fastestTime;
+  final String avgText;
+  final String avgLabel;
+  final List<Session> filteredSessions;
+
+  const _ProfileViewStats({
+    required this.count,
+    required this.totalVolumeL,
+    required this.fastestTime,
+    required this.avgText,
+    required this.avgLabel,
+    required this.filteredSessions,
+  });
+}
+
+// ===========================================================================
+// INTERNAL PROVIDER (Optimierung: Memoization der Berechnungen)
+// Berechnet Statistiken nur neu, wenn sich Sessions oder Filter ändern.
+// ===========================================================================
+final _profileStatsProvider = Provider.autoDispose
+    .family<_ProfileViewStats, List<Session>>((ref, allSessions) {
+  final currentFilter = ref.watch(volumeFilterProvider);
+
+  // 1. Filter Logic
+  int? targetMl;
+  switch (currentFilter) {
+    case VolumeFilter.koelsch:
+      targetMl = 200;
+      break;
+    case VolumeFilter.l033:
+      targetMl = 330;
+      break;
+    case VolumeFilter.l05:
+      targetMl = 500;
+      break;
+    case VolumeFilter.all:
+      targetMl = null;
+      break;
+  }
+
+  final filteredSessions = targetMl != null
+      ? allSessions.where((s) => s.volumeML == targetMl).toList()
+      : allSessions;
+
+  // 2. Calculation Logic
+  final totalCount = filteredSessions.length;
+  double totalVolumeL = 0.0;
+
+  // Single pass loop für Volume und Min-Suche (Performance)
+  int minMS =
+      filteredSessions.isNotEmpty ? filteredSessions.first.durationMS : 0;
+
+  for (var s in filteredSessions) {
+    totalVolumeL += s.volumeLiters;
+    if (s.durationMS > 0 && (minMS == 0 || s.durationMS < minMS)) {
+      minMS = s.durationMS;
+    }
+  }
+
+  String fastestTime = "0.00s";
+  if (filteredSessions.isNotEmpty && minMS > 0) {
+    fastestTime = "${(minMS / 1000).toStringAsFixed(2)} s";
+  }
+
+  String avgText = "N/A";
+  String avgLabel = "Durchschnitt";
+
+  if (filteredSessions.isNotEmpty) {
+    if (currentFilter == VolumeFilter.all) {
+      double totalSpeed = 0.0;
+      int validSessions = 0;
+      for (var s in filteredSessions) {
+        if (s.durationMS > 0) {
+          totalSpeed += s.volumeLiters / (s.durationMS / 1000);
+          validSessions++;
+        }
+      }
+      if (validSessions > 0) {
+        avgText = "${(totalSpeed / validSessions).toStringAsFixed(3)} L/s";
+        avgLabel = "Ø Speed";
+      }
+    } else {
+      double totalMS = 0.0;
+      for (var s in filteredSessions) {
+        totalMS += s.durationMS;
+      }
+      avgText =
+          "${(totalMS / filteredSessions.length / 1000).toStringAsFixed(2)} s";
+      avgLabel = "Ø Zeit";
+    }
+  }
+
+  return _ProfileViewStats(
+    count: totalCount,
+    totalVolumeL: totalVolumeL,
+    fastestTime: fastestTime,
+    avgText: avgText,
+    avgLabel: avgLabel,
+    filteredSessions: filteredSessions,
+  );
+});
+
+// ===========================================================================
+// MAIN SCREEN
+// ===========================================================================
+
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
@@ -17,24 +129,8 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  // ===========================================================================
-  // 1. STATE & VARIABLES
-  // ===========================================================================
-
-  int? get selectedVolumeML {
-    switch (ref.watch(volumeFilterProvider)) {
-      case VolumeFilter.koelsch:
-        return 200;
-      case VolumeFilter.l033:
-        return 330;
-      case VolumeFilter.l05:
-        return 500;
-      case VolumeFilter.all:
-        return null;
-    }
-  }
-
   final _scrollController = ScrollController();
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -43,16 +139,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
-    if (authState.isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    // Optimierung: Select verwenden, um Rebuilds zu vermeiden, wenn sich andere Auth-Properties ändern
+    final authLoading =
+        ref.watch(authControllerProvider.select((s) => s.isLoading));
+    if (authLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final userId = authState.userId!;
+
+    final userId = ref.watch(authControllerProvider.select((s) => s.userId));
+    if (userId == null) return _buildNoUserUI(context);
+
+    // Optimierung: Parallelisierung der Datenabfragen ist hier nicht trivial möglich ohne Logic-Change,
+    // aber wir cachen die AsyncValues, um unnötige "when"-Kaskaden im Build zu glätten.
     final userAsync = ref.watch(userByIdProvider(userId));
     final userSessionsAsync = ref.watch(sessionsByUserIDProvider(userId));
-    final userTopEvents = ref.watch(topEventsByUserProvider(userId));
+    final userTopEventsAsync = ref.watch(topEventsByUserProvider(userId));
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -64,9 +165,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           error: (e, _) => Center(child: Text('Fehler: $e')),
           data: (user) {
-            if (user == null) return _buildNoUserUI();
+            if (user == null) return _buildNoUserUI(context);
 
-            // Render sessions only when they are ready to avoid flicker and fake empties
             return userSessionsAsync.when(
               loading: () => Center(
                 child: CircularProgressIndicator(
@@ -75,122 +175,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               error: (e, _) =>
                   Center(child: Text('Fehler beim Laden der Historie: $e')),
               data: (allSessions) {
-                // top events are optional — use .asData to avoid blocking the UI
-                final List<EventStats>? topEvents = userTopEvents.asData?.value;
-                final EventStats? mostFrequentEvent =
+                // Extraktion der Top Events, falls geladen
+                final topEvents = userTopEventsAsync.asData?.value;
+                final mostFrequentEvent =
                     (topEvents != null && topEvents.isNotEmpty)
                         ? topEvents.first
                         : null;
 
-                // --- FILTERUNG ---
-                List<Session> filteredSessions = allSessions;
-                if (selectedVolumeML != null) {
-                  filteredSessions = allSessions
-                      .where((s) => s.volumeML == selectedVolumeML)
-                      .toList();
-                }
-
-                // --- BERECHNUNGEN ---
-                int totalCount = filteredSessions.length;
-                double totalVolumeL = filteredSessions.fold(
-                    0.0, (sum, s) => sum + s.volumeLiters);
-
-                String fastestTime = "0.00s";
-                if (filteredSessions.isNotEmpty) {
-                  int minMS = filteredSessions
-                      .map((s) => s.durationMS)
-                      .reduce((a, b) => (a != 0 && a < b) ? a : b);
-                  fastestTime = "${(minMS / 1000).toStringAsFixed(2)} s";
-                }
-
-                String avgTime = "N/A";
-                if (filteredSessions.isNotEmpty &&
-                    ref.watch(volumeFilterProvider) != VolumeFilter.all) {
-                  double avgMS = filteredSessions
-                          .map((s) => s.durationMS)
-                          .reduce((a, b) => a + b) /
-                      filteredSessions.length;
-                  avgTime = "${(avgMS / 1000).toStringAsFixed(2)} s";
-                }
-
                 return SingleChildScrollView(
                   controller: _scrollController,
-
-                  // Padding angepasst: Oben weniger (10), da der Button Platz braucht
-                  padding: const EdgeInsets.only(
-                      left: 20, right: 20, top: 10, bottom: 20),
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
                   child: Column(
                     children: [
-                      // -----------------------------------------------------------
-                      // SETTINGS BUTTON (Scrollt jetzt mit!)
-                      // -----------------------------------------------------------
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => const SettingsScreen()),
-                            );
-                          },
-                          icon: const Icon(Icons.settings),
-                          tooltip: 'Einstellungen',
-                        ),
-                      ),
+                      const _SettingsButton(),
 
-                      // -----------------------------------------------------------
-                      // PROFIL INHALT
-                      // -----------------------------------------------------------
-                      _buildAvatar(user['name']?.toString().isNotEmpty == true
-                          ? user['name'][0]
-                          : (user['firstname']?.toString().isNotEmpty == true
-                              ? user['firstname'][0]
-                              : 'U')),
-                      const SizedBox(height: 16),
-                      Text(
-                        user['name'] ?? user['firstname'] ?? 'Unbekannt',
-                        style: const TextStyle(
-                            fontSize: 28, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '@${user['username'] ?? 'user'}',
-                        style: TextStyle(
-                            fontSize: 16,
-                            color: Theme.of(context).colorScheme.onSurface),
+                      // Statische User Info - extracted widget
+                      _UserInfoHeader(user: user),
+                      const SizedBox(height: 24),
+
+                      // Filter Section - extracted to avoid rebuilding header
+                      const _FilterSection(),
+                      const SizedBox(height: 24),
+
+                      // Stats Grid - Berechnungen via Provider ausgelagert
+                      _StatsSection(allSessions: allSessions),
+                      const SizedBox(height: 24),
+
+                      // Charts - RepaintBoundary for GPU optimization
+                      RepaintBoundary(
+                        child: _PieChartSection(allSessions: allSessions),
                       ),
                       const SizedBox(height: 24),
 
-                      // Filter Chips
-                      _buildFilterHeader(),
-                      Row(
-                        children: [
-                          _buildVolumeChip('Alle', VolumeFilter.all),
-                          const SizedBox(width: 12),
-                          _buildVolumeChip('Kölsch', VolumeFilter.koelsch),
-                          const SizedBox(width: 12),
-                          _buildVolumeChip('0,33 L', VolumeFilter.l033),
-                          const SizedBox(width: 12),
-                          _buildVolumeChip('0,5 L', VolumeFilter.l05),
-                        ],
-                      ),
+                      // Top Event
+                      _MostEventCard(mostEvent: mostFrequentEvent),
                       const SizedBox(height: 24),
 
-                      // Statistiken Grid
-                      _buildStatsGrid(
-                          totalCount, fastestTime, avgTime, totalVolumeL),
-                      const SizedBox(height: 24),
-
-                      // Kuchendiagramm
-                      _buildPieChartCard(),
-                      const SizedBox(height: 24),
-
-                      // Meistgetrichtert Event
-                      _buildMostEventCard(mostFrequentEvent),
-                      const SizedBox(height: 24),
-
-                      _buildSessionHistory(AsyncValue.data(allSessions)),
-
+                      // History
+                      _HistorySection(sessions: allSessions),
                       const SizedBox(height: 40),
                     ],
                   ),
@@ -203,14 +225,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  // ===========================================================================
-  // 4. HELPER WIDGETS
-  // ===========================================================================
-
-  // ---------------------------------------------------------------------------
-  // UI für nicht eingeloggte User
-  // ---------------------------------------------------------------------------
-  Widget _buildNoUserUI() {
+  Widget _buildNoUserUI(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -225,7 +240,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const Text('Wähle einen User beim Trichtern aus.'),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () => setState(() {}), // Refresh
+            onPressed: () => setState(() {}),
             style: ElevatedButton.styleFrom(
                 backgroundColor: Theme.of(context).colorScheme.primary),
             child: const Text('Erneut versuchen',
@@ -235,144 +250,265 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Runder Avatar mit Initialen
-  // ---------------------------------------------------------------------------
-  Widget _buildAvatar(String initial) {
+// ===========================================================================
+// SUB-WIDGETS (Optimierung: Granulare Rebuilds & Const Constructors)
+// ===========================================================================
+
+class _SettingsButton extends StatelessWidget {
+  const _SettingsButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: IconButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          );
+        },
+        icon: const Icon(Icons.settings),
+        tooltip: 'Einstellungen',
+      ),
+    );
+  }
+}
+
+class _UserInfoHeader extends StatelessWidget {
+  final Map<String, dynamic> user;
+  const _UserInfoHeader({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final name = user['name'] ?? user['firstname'] ?? 'Unbekannt';
+    final username = user['username'] ?? 'user';
+    final String initial = name.toString().isNotEmpty
+        ? name[0]
+        : (user['firstname']?.toString().isNotEmpty == true
+            ? user['firstname'][0]
+            : 'U');
+
+    return Column(
+      children: [
+        _UserAvatar(initial: initial),
+        const SizedBox(height: 16),
+        Text(
+          name,
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          '@$username',
+          style: TextStyle(
+            fontSize: 16,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UserAvatar extends StatelessWidget {
+  final String initial;
+  const _UserAvatar({required this.initial});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       width: 100,
       height: 100,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer,
+        color: theme.colorScheme.primaryContainer,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-              color: Theme.of(context)
-                  .colorScheme
-                  .primaryContainer
-                  .withOpacity(0.4),
-              blurRadius: 20,
-              offset: const Offset(0, 10))
+            color: theme.colorScheme.primaryContainer.withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
         ],
       ),
-      child: Center(
-          child: Text(initial.toUpperCase(),
-              style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer))),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Überschrift für den Filter-Bereich
-  // ---------------------------------------------------------------------------
-  Widget _buildFilterHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.only(top: 16, bottom: 10),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Icon(Icons.water_drop,
-              size: 18, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(
-            'Filter nach Volumen',
-            style: TextStyle(
-              fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
-              //fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Einzelner Filter-Chip (z.B. "0,33 L")
-  // ---------------------------------------------------------------------------
-  Widget _buildVolumeChip(String text, VolumeFilter label) {
-    final isSelected = ref.watch(volumeFilterProvider) == label;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => ref.read(volumeFilterProvider.notifier).setFilter(label),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: isSelected
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.surfaceContainer),
-          ),
-          child: Text(text,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: isSelected
-                      ? Theme.of(context).colorScheme.onPrimary
-                      : Theme.of(context).colorScheme.onSurface)),
+      alignment: Alignment.center,
+      child: Text(
+        initial.toUpperCase(),
+        style: TextStyle(
+          fontSize: 48,
+          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onPrimaryContainer,
         ),
       ),
     );
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Das 2x2 Grid für die Statistiken (Count, Bestzeit, Avg, Volumen)
-  // ---------------------------------------------------------------------------
-  Widget _buildStatsGrid(int count, String fast, String avg, double totalVol) {
+class _FilterSection extends StatelessWidget {
+  const _FilterSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.only(top: 16, bottom: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Icon(Icons.water_drop,
+                  size: 18, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Filter nach Volumen',
+                style: TextStyle(
+                  fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Row(
+          children: [
+            _VolumeChip(text: 'Alle', value: VolumeFilter.all),
+            SizedBox(width: 12),
+            _VolumeChip(text: 'Kölsch', value: VolumeFilter.koelsch),
+            SizedBox(width: 12),
+            _VolumeChip(text: '0,33 L', value: VolumeFilter.l033),
+            SizedBox(width: 12),
+            _VolumeChip(text: '0,5 L', value: VolumeFilter.l05),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _VolumeChip extends ConsumerWidget {
+  final String text;
+  final VolumeFilter value;
+
+  const _VolumeChip({required this.text, required this.value});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSelected = ref.watch(volumeFilterProvider) == value;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => ref.read(volumeFilterProvider.notifier).setFilter(value),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? colorScheme.primary : colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.surfaceContainer,
+            ),
+          ),
+          child: Text(
+            text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsSection extends ConsumerWidget {
+  final List<Session> allSessions;
+
+  const _StatsSection({required this.allSessions});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Hier wird der interne Provider genutzt -> Rebuild nur wenn sich Ergebnis ändert
+    final stats = ref.watch(_profileStatsProvider(allSessions));
+
     return Column(
       children: [
         Row(
           children: [
             Expanded(
-                child: _buildStatCard(Icons.emoji_events, 'Trichterungen',
-                    '$count', 'Trichterungen')),
+              child: _StatCard(
+                icon: Icons.emoji_events,
+                label: 'Trichterungen',
+                value: '${stats.count}',
+                subtitle: 'Trichterungen',
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard(Icons.timer, 'Bestzeit', fast, 'Zeit')),
+              child: _StatCard(
+                icon: Icons.timer,
+                label: 'Bestzeit',
+                value: stats.fastestTime,
+                subtitle: 'Zeit',
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
-                child: _buildStatCard(
-                    Icons.av_timer, 'Durchschnitt', avg, 'Zeit')),
+              child: _StatCard(
+                icon: Icons.av_timer,
+                label: stats.avgLabel,
+                value: stats.avgText,
+                subtitle: 'Zeit',
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard(Icons.sports_bar, 'Gesamtvolumen',
-                    '${totalVol.toStringAsFixed(1)} L', 'Gesamt')),
+              child: _StatCard(
+                icon: Icons.sports_bar,
+                label: 'Gesamtvolumen',
+                value: '${stats.totalVolumeL.toStringAsFixed(1)} L',
+                subtitle: 'Gesamt',
+              ),
+            ),
           ],
         ),
       ],
     );
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Einzelne Karte innerhalb des Statistik-Grids
-  // ---------------------------------------------------------------------------
-  Widget _buildStatCard(
-    IconData icon,
-    String label,
-    String value,
-    String subtitle,
-  ) {
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String subtitle;
+
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainer,
+        color: theme.colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -382,12 +518,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer,
+              color: theme.colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               icon,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
+              color: theme.colorScheme.onPrimaryContainer,
               size: 24,
             ),
           ),
@@ -399,16 +535,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
+                    fontSize: theme.textTheme.titleMedium?.fontSize,
                     fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: Theme.of(context).textTheme.bodySmall?.fontSize,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: theme.textTheme.bodySmall?.fontSize,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
               ],
@@ -418,11 +554,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
     );
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Karte für das Kuchendiagramm
-  // ---------------------------------------------------------------------------
-  Widget _buildPieChartCard() {
+class _PieChartSection extends StatelessWidget {
+  final List<Session> allSessions;
+  const _PieChartSection({required this.allSessions});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       width: double.infinity,
@@ -440,31 +579,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(
-            height: 220, // adjust as you like
+          SizedBox(
+            height: 220,
             width: double.infinity,
-            child: PieChartSample2(),
+            child: PieChartSample2(sessions: allSessions),
           ),
         ],
       ),
     );
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Karte für das häufigste Event
-  // ---------------------------------------------------------------------------
-  Widget _buildMostEventCard(EventStats? mostEvent) {
+class _MostEventCard extends StatelessWidget {
+  final EventStats? mostEvent;
+  const _MostEventCard({required this.mostEvent});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(16)),
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Meistgetrichtert',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text(
+            'Meistgetrichtert',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           if (mostEvent != null)
             Row(
@@ -474,16 +620,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(mostEvent.eventName,
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w500)),
                       Text(
-                          'Gesamt: ${(mostEvent.totalVolumeL).toStringAsFixed(1)}L',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant)),
+                        mostEvent!.eventName,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        'Gesamt: ${(mostEvent!.totalVolumeL).toStringAsFixed(1)}L',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -491,121 +641,90 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      borderRadius: BorderRadius.circular(12)),
-                  child: Text('${mostEvent.sessionCount}x',
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.onPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13)),
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${mostEvent!.sessionCount}x',
+                    style: TextStyle(
+                      color: theme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
               ],
             )
           else
-            Text('Noch keine Daten vorhanden',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            Text(
+              'Noch keine Daten vorhanden',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
         ],
       ),
     );
   }
+}
 
-  //               String dateStr = "Unbekannt";
-  //               try {
-  //                 dateStr = DateFormat('dd.MM.yyyy')
-  //                     .format(DateTime.parse(s['startedAt']));
-  //               } catch (_) {}
+class _HistorySection extends StatelessWidget {
+  final List<Session> sessions;
+  const _HistorySection({required this.sessions});
 
-  //               return _buildHistoryItem(
-  //                 session: s,
-  //                 date: dateStr,
-  //                 event: s['eventName'] ?? 'Privat',
-  //                 time: '${timeS.toStringAsFixed(2)}s',
-  //                 volume: '${volL.toStringAsFixed(2)}L',
-  //                 flow: '${flow.toStringAsFixed(3)} L/s',
-  //               );
-  //             },
-  //           ),
-  //       ],
-  //     ),
-  //   );
-  // }
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
-//   Widget _buildHistoryItem(Session session) {
-//   return SessionListTile(
-//     session: session,
-//     onEdit: () {
-//       Navigator.push(
-//         context,
-//         MaterialPageRoute(
-//           builder: (_) => SessionScreen()//(session: session),
-//         ),
-//       ).then((_) => _reloadData());
-//     },
-//     onDelete: () => _confirmDeleteSession(session),
-//     onShowGraph: () => _showGraph(session),
-//   );
-// }
+    // Frühzeitiger Return für leere Listen, um unnötige List-Widgets zu vermeiden
+    if (sessions.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTitle(context),
+          const SizedBox(height: 12),
+          Text(
+            'Keine Sessions in der Historie',
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+          )
+        ],
+      );
+    }
 
-  Widget _buildSessionHistory(AsyncValue<List<Session>> allSessionsAsync) {
-    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildTitle(context),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          child: Text(
-            'Verlauf',
-            style: TextStyle(
-              fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // Content from provider
-        allSessionsAsync.when(
-          loading: () => SizedBox(
-            width: double.infinity,
-            child: Center(
-              child: CircularProgressIndicator(color: cs.primary),
-            ),
-          ),
-          error: (err, stack) => Text(
-            'Fehler beim Laden der Historie',
-            style: TextStyle(color: cs.error),
-          ),
-          data: (sessions) {
-            if (sessions.isEmpty) {
-              return Text(
-                'Keine Sessions in der Historie',
-                style: TextStyle(color: cs.onSurfaceVariant),
+          // PageStorageKey beibehalten für Scrollposition-Persistenz
+          child: SessionList(
+            key: const PageStorageKey('sessionsByUserList'),
+            sessions: sessions,
+            embedded: true,
+            onSessionTap: (session) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => SessionScreen(session: session),
+                ),
               );
-            }
-
-            // Just your list, full width, no extra card styling
-            return SizedBox(
-              width: double.infinity,
-              child: SessionList(
-                key: const PageStorageKey('sessionsByUserList'),
-                sessions: sessions,
-                embedded: true, // important so it plays nice in the Column
-                onSessionTap: (session) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => (SessionScreen(
-                          session: session)), // or SessionDetailsScreen
-                    ),
-                  );
-                },
-              ),
-            );
-          },
+            },
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTitle(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Text(
+        'Verlauf',
+        style: TextStyle(
+          fontSize: Theme.of(context).textTheme.titleMedium?.fontSize,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }
