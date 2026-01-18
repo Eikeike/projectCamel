@@ -2,22 +2,25 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
+import 'package:project_camel/auth/token_storage.dart';
 import 'package:project_camel/core/constants.dart';
 
 class AuthRepository {
   final Dio _dio;
   final Dio _authDio;
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final TokenStorage _storage;
+  //final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Completer<bool>? _refreshCompleter;
 
   AuthRepository()
-      : _dio = Dio(BaseOptions(baseUrl: AppConstants.apiBaseUrl)),
+      : _storage = createTokenStorage(),
+        _dio = Dio(BaseOptions(baseUrl: AppConstants.apiBaseUrl)),
         _authDio = Dio(BaseOptions(baseUrl: AppConstants.apiBaseUrl)) {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final token = await _storage.read(key: 'access_token');
+          final token = await _storage.read('access_token');
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -40,7 +43,7 @@ class AuthRepository {
           final refreshed = await _refreshSingleFlight();
 
           if (refreshed) {
-            final newAccessToken = await _storage.read(key: 'access_token');
+            final newAccessToken = await _storage.read('access_token');
 
             final requestOptions = error.requestOptions;
             requestOptions.extra['__retried'] = true;
@@ -93,7 +96,7 @@ class AuthRepository {
   Future<bool> _tryRefreshToken() async {
     print('AUTH: trying refresh...');
 
-    final refreshToken = await _storage.read(key: 'refresh_token');
+    final refreshToken = await _storage.read('refresh_token');
     if (refreshToken == null) return false;
 
     try {
@@ -111,9 +114,9 @@ class AuthRepository {
 
       if (newAccessToken == null) return false;
 
-      await _storage.write(key: 'access_token', value: newAccessToken);
+      await _storage.write('access_token', newAccessToken);
       if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
-        await _storage.write(key: 'refresh_token', value: newRefreshToken);
+        await _storage.write('refresh_token', newRefreshToken);
       }
       print('AUTH: refresh success. ');
 
@@ -150,8 +153,8 @@ class AuthRepository {
       final refreshToken = response.data['refresh'] as String?;
 
       if (accessToken != null && refreshToken != null) {
-        await _storage.write(key: 'access_token', value: accessToken);
-        await _storage.write(key: 'refresh_token', value: refreshToken);
+        await _storage.write('access_token', accessToken);
+        await _storage.write('refresh_token', refreshToken);
       } else {
         throw Exception('Login-Antwort unvollständig');
       }
@@ -161,14 +164,14 @@ class AuthRepository {
   }
 
   Future<String?> _ensureValidAccessTokenOfflineSafe() async {
-    final token = await _storage.read(key: 'access_token');
+    final token = await _storage.read('access_token');
     if (token == null) return null;
 
     if (!JwtDecoder.isExpired(token)) return token;
     final refreshed = await _refreshSingleFlight();
     if (!refreshed) return null;
 
-    return await _storage.read(key: 'access_token');
+    return await _storage.read('access_token');
   }
 
   Future<String?> getUserID() async {
@@ -184,8 +187,8 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    await _storage.delete(key: 'access_token');
-    await _storage.delete(key: 'refresh_token');
+    await _storage.delete('access_token');
+    await _storage.delete('refresh_token');
   }
 
   Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) {
@@ -206,7 +209,7 @@ class AuthRepository {
 
   Future<String?> getStoredUserIdAllowingExpired() async {
     try {
-      final token = await _storage.read(key: 'access_token');
+      final token = await _storage.read('access_token');
       if (token == null) return null;
 
       final decodedToken = JwtDecoder.decode(token);
