@@ -41,81 +41,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     super.dispose();
   }
 
-  // ===========================================================================
-  // 2. LOGIC & ACTIONS
-  // ===========================================================================
-
-  // void _showGraph(Map<String, dynamic> session) {
-  //   final String? valuesJson = session['valuesJSON'] as String?;
-  //   final num? rawVolumeFactor = session['calibrationFactor'] as num?;
-  //   final int? volumeCalibrationFactor = rawVolumeFactor?.toInt();
-
-  //   final List<dynamic> allValues =
-  //       valuesJson != null ? jsonDecode(valuesJson) : [];
-  //   final List<dynamic> graphValues =
-  //       allValues.length > 1 ? allValues.sublist(1) : [];
-  //   final String graphValuesJson = jsonEncode(graphValues);
-
-  //   if (valuesJson != null && volumeCalibrationFactor != null) {
-  //     showGeneralDialog(
-  //       context: context,
-  //       barrierDismissible: true,
-  //       barrierLabel: 'Graph',
-  //       transitionDuration: const Duration(milliseconds: 400),
-  //       pageBuilder: (context, anim1, anim2) => Container(),
-  //       transitionBuilder: (context, anim1, anim2, child) {
-  //         return ScaleTransition(
-  //           scale: anim1,
-  //           child: Padding(
-  //             padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 20),
-  //             child: SessionGraphScreen(
-  //               valuesJson: graphValuesJson,
-  //               volumeCalibrationValue: volumeCalibrationFactor,
-  //             ),
-  //           ),
-  //         );
-  //       },
-  //     );
-  //   } else {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(
-  //           content: Text('Keine Graphendaten für diese Session verfügbar.'),
-  //           backgroundColor: Colors.amber),
-  //     );
-  //   }
-  // }
-
-  // void _confirmDeleteSession(Session session) {
-  //   final sessionName = session.name ?? 'diese Session';
-  //   final sessionID = session.id;
-
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: const Text('Session löschen?'),
-  //       content: Text('Möchtest du "$sessionName" wirklich löschen?'),
-  //       actions: [
-  //         TextButton(
-  //             onPressed: () => Navigator.pop(context),
-  //             child: const Text('Abbrechen')),
-  //         TextButton(
-  //           onPressed: () async {
-  //             await ref
-  //                 .read(sessionRepositoryProvider)
-  //                 .markSessionAsDeleted(sessionID);
-  //             if (mounted) Navigator.pop(context);
-  //           },
-  //           child: const Text('Löschen', style: TextStyle(color: Colors.red)),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
-  // ===========================================================================
-  // 3. UI BUILD METHOD
-  // ===========================================================================
-
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
@@ -319,11 +244,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       width: 100,
       height: 100,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary,
+        color: Theme.of(context).colorScheme.primaryContainer,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+              color: Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withOpacity(0.4),
               blurRadius: 20,
               offset: const Offset(0, 10))
         ],
@@ -333,7 +261,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onPrimary))),
+                  color: Theme.of(context).colorScheme.onPrimaryContainer))),
     );
   }
 
@@ -409,20 +337,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         Row(
           children: [
             Expanded(
-                child: _buildStatCard(
-                    Icons.emoji_events,
-                    Theme.of(context).colorScheme.primary,
-                    'Trichterungen',
-                    '$count',
-                    'Trichterungen')),
+                child: _buildStatCard(Icons.emoji_events, 'Trichterungen',
+                    '$count', 'Trichterungen')),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard(
-                    Icons.timer,
-                    Theme.of(context).colorScheme.primary,
-                    'Bestzeit',
-                    fast,
-                    'Zeit')),
+                child: _buildStatCard(Icons.timer, 'Bestzeit', fast, 'Zeit')),
           ],
         ),
         const SizedBox(height: 12),
@@ -430,19 +349,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           children: [
             Expanded(
                 child: _buildStatCard(
-                    Icons.av_timer,
-                    Theme.of(context).colorScheme.primary,
-                    'Durchschnitt',
-                    avg,
-                    'Zeit')),
+                    Icons.av_timer, 'Durchschnitt', avg, 'Zeit')),
             const SizedBox(width: 12),
             Expanded(
-                child: _buildStatCard(
-                    Icons.sports_bar,
-                    Theme.of(context).colorScheme.primary,
-                    'Gesamtvolumen',
-                    '${totalVol.toStringAsFixed(1)} L',
-                    'Gesamt')),
+                child: _buildStatCard(Icons.sports_bar, 'Gesamtvolumen',
+                    '${totalVol.toStringAsFixed(1)} L', 'Gesamt')),
           ],
         ),
       ],
@@ -454,7 +365,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ---------------------------------------------------------------------------
   Widget _buildStatCard(
     IconData icon,
-    Color iconColor,
     String label,
     String value,
     String subtitle,
@@ -472,12 +382,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+              color: Theme.of(context).colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               icon,
-              color: Theme.of(context).colorScheme.onPrimary,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
               size: 24,
             ),
           ),

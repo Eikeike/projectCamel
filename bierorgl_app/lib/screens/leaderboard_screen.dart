@@ -118,8 +118,9 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
 
       // 1. APP BAR WITH PRIMARY TABS
       appBar: AppBar(
-        title: const Text('Leaderboard',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('Leaderboard',
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: colorScheme.primary)),
         centerTitle: true,
         backgroundColor: colorScheme.surface,
         scrolledUnderElevation: 0,

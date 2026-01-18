@@ -49,6 +49,10 @@ class _NewEventScreenState extends ConsumerState<NewEventScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        title: Text('Events',
+            style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary)),
         centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton(

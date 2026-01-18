@@ -44,8 +44,9 @@ class SessionListTile extends StatelessWidget {
 
     final startedAtLocal = session.startedAt.toLocal();
     final dateLabel = '${startedAtLocal.day.toString().padLeft(2, '0')}.'
-        '${startedAtLocal.month.toString().padLeft(2, '0')}.'
-        '${startedAtLocal.year}';
+        '${startedAtLocal.month.toString().padLeft(2, '0')} '
+        '${startedAtLocal.hour.toString().padLeft(2, '0')}:'
+        '${startedAtLocal.minute.toString().padLeft(2, '0')}';
 
     final volumeLabel = '${session.volumeLiters.toStringAsFixed(2)} L';
     final eventLabel = session.eventName ?? 'Privat';
@@ -119,7 +120,7 @@ class SessionListTile extends StatelessWidget {
             // ---------- Duration Right Side ----------
             Text(
               durationLabel,
-              style: textTheme.titleLarge?.copyWith(
+              style: textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w900,
                 color: cs.primary,
               ),
