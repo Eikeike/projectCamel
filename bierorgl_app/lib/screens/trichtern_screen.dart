@@ -15,95 +15,82 @@ class TrichternScreen extends ConsumerStatefulWidget {
 
 class _TrichternScreenState extends ConsumerState<TrichternScreen> {
   // ===========================================================================
-  // 1. STATE & LISTENER LOGIC
+  // 1. LIFECYCLE & LOGIC
   // ===========================================================================
-  bool _needsStateRefresh = true;
-  bool _shouldForceReadyOnReturn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialer State-Refresh nur einmal beim Laden, nicht via Polling im Build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(trichterConnectionProvider.notifier).queryCurrentDeviceState();
+    });
+  }
+
+  void _handleSessionFinished(TrichterDataState next) {
+    // Volumen-Berechnung auslagern, um UI-Thread nicht zu blockieren (falls komplex)
+    // Hier simpel gehalten, da Berechnung trivial ist.
+    int? calculatedVolumeML;
+    if (next.volumeCalibrationFactor != null &&
+        next.volumeCalibrationFactor! > 0) {
+      final double ratio = next.msValues.length / next.volumeCalibrationFactor!;
+      calculatedVolumeML = (ratio * 500).round();
+    }
+
+    if (mounted) {
+      // Debug-Ausgaben (könnten in Production entfernt werden)
+      debugPrint("--- SESSION FINISHED ---");
+      debugPrint(
+          "Dauer: ${next.lastDurationMS}ms | Ticks: ${next.msValues.length}");
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SessionScreen(
+            durationMS: next.lastDurationMS,
+            allValues: next.msValues,
+            calibrationFactor: next.volumeCalibrationFactor?.toDouble(),
+            calculatedVolumeML: calculatedVolumeML,
+          ),
+        ),
+      ).then((_) => _onReturnFromSession());
+    }
+  }
+
+  void _onReturnFromSession() {
+    if (!mounted) return;
+
+    // Reset Logic direkt hier, statt via Flags im Build-Cycle
+    final connNotifier = ref.read(trichterConnectionProvider.notifier);
+    final dataNotifier = ref.read(trichterDataHandlerProvider.notifier);
+    final connState = ref.read(trichterConnectionProvider);
+
+    dataNotifier.resetSession();
+
+    // Force Ready falls nötig
+    if (connState.deviceStatus == TrichterDeviceStatus.sending ||
+        connState.deviceStatus == TrichterDeviceStatus.running) {
+      connNotifier.requestState(TrichterDeviceStatus.ready);
+    }
+
+    // State Refresh
+    connNotifier.queryCurrentDeviceState();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // --- PROVIDER WATCHERS ---
-    // Beobachte den Verbindungsstatus & die Daten-Eingänge separat
-    // Nutzt Riverpod's Reaktivität statt manueller Timer
-    final connection = ref.watch(trichterConnectionProvider);
-    final dataState = ref.watch(trichterDataHandlerProvider);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (_needsStateRefresh) {
-      _needsStateRefresh = false;
-
-      ref.read(trichterConnectionProvider.notifier)
-          .queryCurrentDeviceState();
-    }
-    
-    if (_shouldForceReadyOnReturn) {
-      _shouldForceReadyOnReturn = false;
-        final notifier = ref.read(trichterConnectionProvider.notifier);
-        final state = ref.read(trichterConnectionProvider);
-
-        //Force ready when still in sending
-        if (state.deviceStatus == TrichterDeviceStatus.sending ||
-            state.deviceStatus == TrichterDeviceStatus.running) {
-          notifier.requestState(TrichterDeviceStatus.ready);
-        }
-
-    }
-    });
-
-    final bool isConnected =
-        connection.status == TrichterConnectionStatus.connected;
-
-    // --- NAVIGATION LISTENER ---
-    // Reagiert auf das Ende der Übertragung (Side-Effect)
+    // --- LISTENER (Navigation & Fehler) ---
+    // Wir hören hier nur auf spezifische Änderungen für Events
     ref.listen<TrichterDataState>(trichterDataHandlerProvider,
         (previous, next) {
-      // Navigation auslösen, wenn isSessionFinished von false auf true springt
-      final bool wasJustFinished = (previous?.isSessionFinished == false &&
+      // Navigation
+      final wasJustFinished = (previous?.isSessionFinished == false &&
           next.isSessionFinished == true);
-
       if (wasJustFinished && next.lastDurationMS > 0) {
-        // Volumen-Schätzung basierend auf der Hardware-Kalibrierung
-        int? calculatedVolumeML;
-        if (next.volumeCalibrationFactor != null &&
-            next.volumeCalibrationFactor! > 0) {
-          // Jeder Eintrag in msValues entspricht einem physischen Tick
-          // Formel: (Gemessene Ticks / Kalibrierungs-Ticks für 0.5L) * 500
-          final double ratio =
-              next.msValues.length / next.volumeCalibrationFactor!;
-          calculatedVolumeML = (ratio * 500).round();
-        }
-
-        if (mounted) {
-          // Debug-Log für die Hardware-Abstimmung
-          debugPrint("--- SESSION FINISHED ---");
-          debugPrint("Dauer: ${next.lastDurationMS}ms");
-          debugPrint("Ticks: ${next.msValues.length}");
-          debugPrint("V-Factor: ${next.volumeCalibrationFactor}");
-          debugPrint("Schätzung: $calculatedVolumeML ml");
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SessionScreen(
-                durationMS: next.lastDurationMS,
-                allValues:
-                    next.msValues, // msValues sind bereits skaliert & geparst
-                calibrationFactor: next.volumeCalibrationFactor?.toDouble(),
-                calculatedVolumeML: calculatedVolumeML,
-              ),
-            ),
-          ).then((_) {
-            // WICHTIG: Wenn der User zurückkommt, den State für die nächste Messung leeren
-            if (mounted) {
-              ref.read(trichterDataHandlerProvider.notifier).resetSession();
-              _needsStateRefresh = true;
-              _shouldForceReadyOnReturn = true;
-            }
-          });
-        }
+        _handleSessionFinished(next);
       }
 
-      // Fehlerbehandlung: Zeige Übertragungsfehler als SnackBar
+      // Fehlerbehandlung
       if (next.error != null && previous?.error == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -115,47 +102,47 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     });
 
     // ===========================================================================
-    // 2. UI LAYOUT BUILD
+    // 2. UI LAYOUT
     // ===========================================================================
-
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Header-Bereich
-            _buildHeader(context),
+            // Statischer Header (kein Rebuild nötig)
+            const _HeaderSection(),
 
-            // Bluetooth-Status Kachel (Modular eingebunden)
+            // Bluetooth Status Tile (Self-contained widget)
             const BluetoothSettingsTile(),
 
-            // Mittlerer Bereich: Dynamische Status-Anzeige
-            Expanded(
+            // Status Circle
+            // Isoliert in Expanded, damit der Rest der Column statisch bleiben kann
+            const Expanded(
               child: Center(
-                child: _buildStatusCircle(context, connection, dataState),
+                // RepaintBoundary für Performance bei Animationen (Progress Spinner)
+                child: RepaintBoundary(
+                  child: _StatusCircle(),
+                ),
               ),
-            ),
-
-            // Footer-Bereich: Dynamische Texte je nach Zustand
-            _buildFooter(
-              context,
-              connection,
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  // ===========================================================================
-  // 3. HELPER WIDGETS
-  // ===========================================================================
+// ===========================================================================
+// 3. OPTIMIZED SUB-WIDGETS
+// ===========================================================================
 
-  // ---------------------------------------------------------------------------
-  // Header: Titel und Slogan
-  // ---------------------------------------------------------------------------
-  Widget _buildHeader(BuildContext context) {
+class _HeaderSection extends StatelessWidget {
+  const _HeaderSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -166,84 +153,41 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
             style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary),
+                color: theme.colorScheme.primary),
           ),
           const SizedBox(height: 8),
           Text(
             'Bereit zum Ballern!',
             textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 16, color: Theme.of(context).colorScheme.onSurface),
+            style: TextStyle(fontSize: 16, color: theme.colorScheme.onSurface),
           ),
         ],
       ),
     );
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Status Circle: Visualisiert alle Hardware-States (Idle, Ready, Running...)
-// ---------------------------------------------------------------------------
-  Widget _buildStatusCircle(BuildContext context,
-      TrichterConnectionState connState, TrichterDataState data) {
+class _StatusCircle extends ConsumerWidget {
+  const _StatusCircle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Selektives Watching: Wir rebuilden nur diesen Kreis, wenn sich
+    // Status oder Progress ändern. Nicht den ganzen Screen.
+    final connState = ref.watch(trichterConnectionProvider);
+    // Optimierung: Nur 'progress' beobachten, da 'error' im Parent behandelt wird
+    final progress =
+        ref.watch(trichterDataHandlerProvider.select((d) => d.progress));
+
     final theme = Theme.of(context);
-
-    // Zum Testen hier hardcoden, später wieder state.deviceStatus nutzen
-    //final status = TrichterDeviceStatus.error;
     final status = connState.deviceStatus;
-
-    // Zum Testen hier hardcoden, später wieder connState.status == TrichterConnectionStatus.connected nutzen
-    //final isConnected = true;
     final isConnected = connState.status == TrichterConnectionStatus.connected;
 
-    Color color;
-    IconData icon;
-    String text;
+    // Visual Determination Logic
+    final (Color color, IconData icon, String text) =
+        _getStatusVisuals(isConnected, status, theme.colorScheme);
 
-    if (!isConnected) {
-      color = theme.colorScheme.error;
-      icon = Icons.bluetooth_disabled;
-      text = 'Keine Verbindung';
-    } else {
-      switch (status) {
-        case TrichterDeviceStatus.idle:
-          color = theme.colorScheme.secondary;
-          icon = Icons.nights_stay_rounded;
-          text = 'Warte auf Wakeup';
-          break;
-        case TrichterDeviceStatus.ready:
-          color = theme.colorScheme.primary;
-          icon = Icons.sports_bar;
-          text = 'Bereit!';
-          break;
-        case TrichterDeviceStatus.running:
-          color = theme.colorScheme.tertiary;
-          icon = Icons.timer;
-          text = 'Läuft...';
-          break;
-        case TrichterDeviceStatus.sending:
-          color = theme.colorScheme.tertiary;
-          icon = Icons.move_to_inbox_rounded;
-          text = 'Empfange Daten...';
-          break;
-        case TrichterDeviceStatus.calibrating:
-          color = theme.colorScheme.tertiary;
-          icon = Icons.build_rounded;
-          text = 'Kalibrieren';
-          break;
-        case TrichterDeviceStatus.error:
-          color = theme.colorScheme.error;
-          icon = Icons.warning_amber_rounded;
-          text = 'Gerätefehler';
-          break;
-        default:
-          color = theme.colorScheme.outline;
-          icon = Icons.question_mark;
-          text = 'Unbekannt';
-      }
-    }
-
-    final bool isTransferringWithProgress =
-        data.progress > 0 && data.progress < 1;
+    final bool isTransferringWithProgress = progress > 0 && progress < 1;
 
     return Container(
       width: 280,
@@ -268,7 +212,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
               width: 80,
               height: 80,
               child: CircularProgressIndicator(
-                value: data.progress,
+                value: progress,
                 strokeWidth: 8,
                 color: color,
                 backgroundColor: color.withOpacity(0.2),
@@ -288,7 +232,7 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
           ),
           if (isTransferringWithProgress)
             Text(
-              "${(data.progress * 100).toInt()}%",
+              "${(progress * 100).toInt()}%",
               style: TextStyle(
                   color: color, fontWeight: FontWeight.bold, fontSize: 16),
             )
@@ -297,124 +241,36 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-// Footer: Dynamische Buttons basierend auf dem Hardware-Status
-  // ---------------------------------------------------------------------------
-  Widget _buildFooter(BuildContext context, TrichterConnectionState state) {
-    // if (state.status != TrichterConnectionStatus.connected) {
-    //   return const SizedBox.shrink();
-    // }
-
-    final notifier = ref.read(trichterConnectionProvider.notifier);
-    // Zum Testen hier hardcoden, später wieder state.deviceStatus nutzen:
-    //final status = TrichterDeviceStatus.error;
-    final status = state.deviceStatus;
-
-    return Padding(
-      padding:
-          const EdgeInsets.fromLTRB(16, 0, 16, 32), // Etwas mehr Platz unten
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        // Scale + Fade wirkt moderner und flüssiger
-        transitionBuilder: (child, animation) => FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(scale: animation, child: child),
-        ),
-        child: _buildButtonsForStatus(context, status, notifier),
-      ),
-    );
-  }
-
-  Widget _buildButtonsForStatus(BuildContext context,
-      TrichterDeviceStatus status, TrichterConnectionService notifier) {
-    // M3 Style Helper: Macht die Buttons höher (56dp) für bessere Haptik
-    final buttonStyle = FilledButton.styleFrom(
-      minimumSize: const Size.fromHeight(56),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    );
-
-    // Helper für das Layout
-    Widget buildRow({
-      required Widget left,
-      required Widget right,
-      required Key key,
-    }) {
-      return Row(
-        key: key,
-        children: [
-          Expanded(child: left),
-          const SizedBox(width: 16), // 16dp ist Standard M3 Gap
-          Expanded(child: right),
-        ],
-      );
+  // Pure Helper Function for logic separation
+  (Color, IconData, String) _getStatusVisuals(
+      bool isConnected, TrichterDeviceStatus status, ColorScheme colors) {
+    if (!isConnected) {
+      return (colors.error, Icons.bluetooth_disabled, 'Keine Verbindung');
     }
 
     switch (status) {
-      // --- FALL A: IDLE (Energiesparmodus) ---
       case TrichterDeviceStatus.idle:
-        return buildRow(
-          key: const ValueKey('idle'),
-          // Links: Kalibrieren
-          left: FilledButton.tonalIcon(
-            style: buttonStyle,
-            onPressed: () =>
-                notifier.requestState(TrichterDeviceStatus.calibrating),
-            icon: const Icon(
-                Icons.build_rounded), // Tune passt besser zu "Kalibrieren"
-            label: const Text("Kalibrieren"),
-          ),
-          // Rechts: Aufwecken (Hauptaktion)
-          right: FilledButton.icon(
-            style: buttonStyle,
-            onPressed: () => notifier.requestState(TrichterDeviceStatus.ready),
-            icon: const Icon(Icons.power_settings_new),
-            label: const Text("Aufwecken"),
-          ),
+        return (
+          colors.secondary,
+          Icons.nights_stay_rounded,
+          'Warte auf Wakeup'
         );
-
-      // --- FALL B: CALIBRATE (Einstellen) ---
-      case TrichterDeviceStatus.calibrating:
-        return buildRow(
-          key: const ValueKey('calib'),
-          // Links: Abbruch -> Standby
-          left: OutlinedButton.icon(
-            style: buttonStyle, // Auch Outlined bekommt die Höhe
-            onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
-            icon: const Icon(Icons.nights_stay_rounded),
-            label: const Text("Standby"),
-          ),
-          // Rechts: Übernehmen -> Starten
-          right: FilledButton.icon(
-            style: buttonStyle,
-            onPressed: () => notifier.requestState(TrichterDeviceStatus.ready),
-            icon: const Icon(Icons.check), // Haken für "Fertig/Übernehmen"
-            label: const Text("Fertig"),
-          ),
-        );
-
-      // --- FALL C: READY (Scharf geschaltet) ---
       case TrichterDeviceStatus.ready:
-        return buildRow(
-          key: const ValueKey('ready'),
-          // Links: Standby
-          left: OutlinedButton.icon(
-            style: buttonStyle,
-            onPressed: () => notifier.requestState(TrichterDeviceStatus.idle),
-            icon: const Icon(Icons.nights_stay_rounded),
-            label: const Text("Standby"),
-          ),
-          // Rechts: Kalibrieren
-          right: FilledButton.tonalIcon(
-            style: buttonStyle,
-            onPressed: () =>
-                notifier.requestState(TrichterDeviceStatus.calibrating),
-            icon: const Icon(Icons.build_rounded),
-            label: const Text("Kalibrieren"),
-          ),
+        return (colors.primary, Icons.sports_bar, 'Bereit!');
+      case TrichterDeviceStatus.running:
+        return (colors.tertiary, Icons.timer, 'Läuft...');
+      case TrichterDeviceStatus.sending:
+        return (
+          colors.tertiary,
+          Icons.move_to_inbox_rounded,
+          'Empfange Daten...'
         );
-
+      case TrichterDeviceStatus.calibrating:
+        return (colors.tertiary, Icons.build_rounded, 'Kalibrieren');
+      case TrichterDeviceStatus.error:
+        return (colors.error, Icons.warning_amber_rounded, 'Gerätefehler');
       default:
-        return const SizedBox.shrink();
+        return (colors.outline, Icons.question_mark, 'Unbekannt');
     }
   }
 }
