@@ -23,5 +23,5 @@ Repository-Struktur
 **trichter-device**
 	Enthält den gesamten embedded code. Benötigt eine Installation vom Zephyr RTOS und muss auf diesen verlinken. Siehe in trichter-device enthaltene Readme.rst
 
-**mobile-android**
-	Enthält die gesamte App für das Smartphone (Android), mit der das embedded device gesteuert und ausgelesen werden kann.
+**bierorgl_app**
+	Enthält die gesamte App für das Smartphone (FLutter based, bisher nur android support), mit der das embedded device gesteuert und ausgelesen werden kann.
