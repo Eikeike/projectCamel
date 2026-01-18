@@ -184,3 +184,43 @@ class Session {
     );
   }
 }
+
+@immutable
+class AggregatedLeaderboardEntry {
+  final String userId;
+  final String? username;
+  final num value;
+  final int? rank;
+
+  const AggregatedLeaderboardEntry({
+    required this.userId,
+    required this.value,
+    this.username,
+    this.rank,
+  });
+
+  factory AggregatedLeaderboardEntry.fromDb(
+    Map<String, dynamic> row, {
+    String userIdKey = 'userID',
+    String valueKey = 'value',
+    String usernameKey = 'username',
+    String rankKey = 'rank',
+  }) {
+    return AggregatedLeaderboardEntry(
+      userId: (row[userIdKey] ?? '').toString(),
+      username: row[usernameKey] as String?,
+      value: (row[valueKey] as num?) ?? 0,
+      rank: (row[rankKey] as num?)?.toInt(),
+    );
+  }
+
+  /// Create a copy with a new rank value
+  AggregatedLeaderboardEntry copyWithRank(int newRank) {
+    return AggregatedLeaderboardEntry(
+      userId: userId,
+      username: username,
+      value: value,
+      rank: newRank,
+    );
+  }
+}

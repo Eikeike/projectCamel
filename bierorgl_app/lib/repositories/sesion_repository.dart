@@ -6,6 +6,17 @@ import 'package:project_camel/models/session.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+enum LeaderboardSort { fastest, slowest, newest, oldest }
+
+extension LeaderboardSortSql on LeaderboardSort {
+  String get orderBySql => switch (this) {
+        LeaderboardSort.fastest => 's.durationMS ASC',
+        LeaderboardSort.slowest => 's.durationMS DESC',
+        LeaderboardSort.newest => 's.startedAt DESC',
+        LeaderboardSort.oldest => 's.startedAt ASC',
+      };
+}
+
 class SessionRepository {
   SessionRepository(this._db, this._bus);
 
@@ -188,5 +199,215 @@ class SessionRepository {
       whereArgs: [sessionID],
     );
     _bus.add(DbTopic.sessions);
+  }
+
+//Leaderboard
+
+  Future<List<Session>> getLeaderboardSessions({
+    Set<String>? userIDs,
+    int? volumeML,
+    String? eventID,
+    LeaderboardSort sort = LeaderboardSort.fastest,
+    int? limit,
+    int? offset,
+  }) async {
+    final db = await _db.database;
+
+    final where = <String>['s.localDeletedAt IS NULL'];
+    final args = <Object?>[];
+
+    // Multi-select users: WHERE s.userID IN (?, ?, ...)
+    final normalizedUserIDs =
+        (userIDs ?? {}).where((e) => e.isNotEmpty).toSet();
+    if (normalizedUserIDs.isNotEmpty) {
+      final placeholders = List.filled(normalizedUserIDs.length, '?').join(',');
+      where.add('s.userID IN ($placeholders)');
+      args.addAll(normalizedUserIDs);
+    }
+
+    if (volumeML != null) {
+      where.add('s.volumeML = ?');
+      args.add(volumeML);
+    }
+
+    if (eventID != null && eventID.isNotEmpty) {
+      where.add('s.eventID = ?');
+      args.add(eventID);
+    }
+
+    final sql = StringBuffer()
+      ..writeln('SELECT')
+      ..writeln('  s.*,')
+      ..writeln('  u.username AS username,')
+      ..writeln("  u.firstname AS firstname,")
+      ..writeln("  u.lastname AS lastname,")
+      ..writeln('  e.name AS eventName')
+      ..writeln('FROM Session s')
+      ..writeln('JOIN User u ON u.userID = s.userID')
+      ..writeln('LEFT JOIN Event e ON e.eventID = s.eventID')
+      ..writeln('WHERE ${where.join(' AND ')}')
+      ..writeln('ORDER BY ${sort.orderBySql}');
+
+    if (limit != null) {
+      sql.writeln('LIMIT ?');
+      args.add(limit);
+      if (offset != null) {
+        sql.writeln('OFFSET ?');
+        args.add(offset);
+      }
+    }
+
+    final rows = await db.rawQuery(sql.toString(), args);
+    return rows.map(Session.fromLeaderboardRow).toList(growable: false);
+  }
+
+  Future<List<AggregatedLeaderboardEntry>> getUserSecondsPerLiter({
+    Set<String>? userIDs,
+    String? eventID,
+  }) async {
+    final db = await _db.database;
+
+    final where = <String>['s.localDeletedAt IS NULL'];
+    final args = <Object?>[];
+
+    // Multi-select users
+    final normalizedUserIDs =
+        (userIDs ?? {}).where((e) => e.isNotEmpty).toSet();
+    if (normalizedUserIDs.isNotEmpty) {
+      final placeholders = List.filled(normalizedUserIDs.length, '?').join(',');
+      where.add('s.userID IN ($placeholders)');
+      args.addAll(normalizedUserIDs);
+    }
+
+    // Filter by event
+    if (eventID != null && eventID.isNotEmpty) {
+      where.add('s.eventID = ?');
+      args.add(eventID);
+    }
+
+    final sql = '''
+      SELECT s.userID, u.username, 
+      AVG(CAST(s.durationMS AS FLOAT) / (CAST(s.volumeML AS FLOAT) / 1000.0)) as value
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      WHERE ${where.join(' AND ')}
+      GROUP BY s.userID
+      ORDER BY value ASC
+    ''';
+
+    final rows = await db.rawQuery(sql, args);
+    return rows
+        .asMap()
+        .entries
+        .map(
+          (entry) => AggregatedLeaderboardEntry.fromDb(
+            entry.value,
+            userIdKey: 'userID',
+            usernameKey: 'username',
+            valueKey: 'value',
+            rankKey: 'rank',
+          ).copyWithRank(entry.key + 1),
+        )
+        .toList();
+  }
+
+  Future<List<AggregatedLeaderboardEntry>> getSessionCountAgg({
+    Set<String>? userIDs,
+    String? eventID,
+  }) async {
+    final db = await _db.database;
+
+    final where = <String>['s.localDeletedAt IS NULL'];
+    final args = <Object?>[];
+
+    // Multi-select users
+    final normalizedUserIDs =
+        (userIDs ?? {}).where((e) => e.isNotEmpty).toSet();
+    if (normalizedUserIDs.isNotEmpty) {
+      final placeholders = List.filled(normalizedUserIDs.length, '?').join(',');
+      where.add('s.userID IN ($placeholders)');
+      args.addAll(normalizedUserIDs);
+    }
+
+    // Filter by event
+    if (eventID != null && eventID.isNotEmpty) {
+      where.add('s.eventID = ?');
+      args.add(eventID);
+    }
+
+    final sql = '''
+      SELECT s.userID, u.username,
+      COUNT(s.sessionID) as value
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      WHERE ${where.join(' AND ')}
+      GROUP BY s.userID
+      ORDER BY value DESC
+    ''';
+
+    final rows = await db.rawQuery(sql, args);
+    return rows
+        .asMap()
+        .entries
+        .map(
+          (entry) => AggregatedLeaderboardEntry.fromDb(
+            entry.value,
+            userIdKey: 'userID',
+            usernameKey: 'username',
+            valueKey: 'value',
+            rankKey: 'rank',
+          ).copyWithRank(entry.key + 1),
+        )
+        .toList();
+  }
+
+  Future<List<AggregatedLeaderboardEntry>> getLeaderboardTotalVolume({
+    Set<String>? userIDs,
+    String? eventID,
+  }) async {
+    final db = await _db.database;
+
+    final where = <String>['s.localDeletedAt IS NULL'];
+    final args = <Object?>[];
+
+    // Multi-select users
+    final normalizedUserIDs =
+        (userIDs ?? {}).where((e) => e.isNotEmpty).toSet();
+    if (normalizedUserIDs.isNotEmpty) {
+      final placeholders = List.filled(normalizedUserIDs.length, '?').join(',');
+      where.add('s.userID IN ($placeholders)');
+      args.addAll(normalizedUserIDs);
+    }
+
+    // Filter by event
+    if (eventID != null && eventID.isNotEmpty) {
+      where.add('s.eventID = ?');
+      args.add(eventID);
+    }
+
+    final sql = '''
+      SELECT s.userID, u.username,
+      SUM(s.volumeML) as value
+      FROM Session s
+      JOIN User u ON s.userID = u.userID
+      WHERE ${where.join(' AND ')}
+      GROUP BY s.userID
+      ORDER BY value DESC
+    ''';
+
+    final rows = await db.rawQuery(sql, args);
+    return rows
+        .asMap()
+        .entries
+        .map(
+          (entry) => AggregatedLeaderboardEntry.fromDb(
+            entry.value,
+            userIdKey: 'userID',
+            usernameKey: 'username',
+            valueKey: 'value',
+            rankKey: 'rank',
+          ).copyWithRank(entry.key + 1),
+        )
+        .toList();
   }
 }

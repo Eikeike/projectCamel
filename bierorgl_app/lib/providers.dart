@@ -139,6 +139,83 @@ final sessionsByEventIDProvider =
     query: () => repo.getSessionsByEventID(eventID),
   );
 });
+
+typedef LeaderboardParams = ({
+  Set<String>? userIDs,
+  int? volumeML,
+  String? eventID,
+  LeaderboardSort sort,
+  int? limit,
+  int? offset,
+});
+
+final leaderboardSessionsProvider =
+    StreamProvider.family<List<Session>, LeaderboardParams>((ref, params) {
+  final repo = ref.watch(sessionRepositoryProvider);
+  final bus = ref.watch(dbChangeBusProvider);
+
+  return watchQuery<List<Session>>(
+    bus: bus.stream,
+    topic: DbTopic.sessions,
+    query: () => repo.getLeaderboardSessions(
+      userIDs: params.userIDs,
+      volumeML: params.volumeML,
+      eventID: params.eventID,
+      sort: params.sort,
+      limit: params.limit,
+      offset: params.offset,
+    ),
+  );
+});
+
+final leaderboardTotalVolumeProvider =
+    StreamProvider.family<List<AggregatedLeaderboardEntry>, LeaderboardParams>(
+        (ref, params) {
+  final repo = ref.watch(sessionRepositoryProvider);
+  final bus = ref.watch(dbChangeBusProvider);
+
+  return watchQuery<List<AggregatedLeaderboardEntry>>(
+    bus: bus.stream,
+    topic: DbTopic.sessions,
+    query: () => repo.getLeaderboardTotalVolume(
+      userIDs: params.userIDs,
+      eventID: params.eventID,
+    ),
+  );
+});
+
+final leaderboardSessionCountProvider =
+    StreamProvider.family<List<AggregatedLeaderboardEntry>, LeaderboardParams>(
+        (ref, params) {
+  final repo = ref.watch(sessionRepositoryProvider);
+  final bus = ref.watch(dbChangeBusProvider);
+
+  return watchQuery<List<AggregatedLeaderboardEntry>>(
+    bus: bus.stream,
+    topic: DbTopic.sessions,
+    query: () => repo.getSessionCountAgg(
+      userIDs: params.userIDs,
+      eventID: params.eventID,
+    ),
+  );
+});
+
+final leaderboardAvgSecondsPerLiterProvider =
+    StreamProvider.family<List<AggregatedLeaderboardEntry>, LeaderboardParams>(
+        (ref, params) {
+  final repo = ref.watch(sessionRepositoryProvider);
+  final bus = ref.watch(dbChangeBusProvider);
+
+  return watchQuery<List<AggregatedLeaderboardEntry>>(
+    bus: bus.stream,
+    topic: DbTopic.sessions,
+    query: () => repo.getUserSecondsPerLiter(
+      userIDs: params.userIDs,
+      eventID: params.eventID,
+    ),
+  );
+});
+
 // --- Users (list from DB) ---
 final usersProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   final dbHelper = ref.watch(databaseHelperProvider);
