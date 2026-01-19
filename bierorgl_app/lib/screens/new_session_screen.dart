@@ -112,8 +112,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
     if (state.selectedUserID == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Wer hat getrichtert?'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Wer hat getrichtert?'),
+            backgroundColor: Theme.of(context).colorScheme.error),
       );
       return;
     }
@@ -148,18 +149,22 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
           .read(sessionRepositoryProvider)
           .saveSessionForSync(session, isEditing: _isEditing);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Erfolgreich gespeichert!'),
-              backgroundColor: Colors.green),
-        );
-        Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erfolgreich gespeichert!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.of(context).pop();
     } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Fehler: $e')));
+      }
+    } finally {
       notifier.setSaving(false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Fehler: $e')));
     }
   }
 
