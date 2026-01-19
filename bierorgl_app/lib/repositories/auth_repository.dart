@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:project_camel/auth/token_storage.dart';
 import 'package:project_camel/core/constants.dart';
+import 'package:project_camel/services/auto_sync_controller.dart';
 
 class AuthRepository {
   final Dio _dio;
