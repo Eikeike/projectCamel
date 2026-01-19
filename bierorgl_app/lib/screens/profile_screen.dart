@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/models/session.dart';
 import 'package:project_camel/models/event.dart';
 import 'package:project_camel/providers.dart';
+import 'package:project_camel/screens/event_edit_screen.dart';
 import 'package:project_camel/screens/new_session_screen.dart';
 import 'package:project_camel/widgets/pie_chart.dart';
 import 'package:project_camel/widgets/session_list.dart';
@@ -590,13 +591,19 @@ class _PieChartSection extends StatelessWidget {
   }
 }
 
-class _MostEventCard extends StatelessWidget {
+class _MostEventCard extends ConsumerWidget {
   final EventStats? mostEvent;
   const _MostEventCard({required this.mostEvent});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+
+    final eventAsync = (mostEvent == null)
+        ? const AsyncValue<Event?>.data(null)
+        : ref.watch(eventByIdProvider(
+            mostEvent!.eventId)); // <-- use your id field name
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -612,53 +619,89 @@ class _MostEventCard extends StatelessWidget {
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          if (mostEvent != null)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        mostEvent!.eventName,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        'Gesamt: ${(mostEvent!.totalVolumeL).toStringAsFixed(1)}L',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${mostEvent!.sessionCount}x',
-                    style: TextStyle(
-                      color: theme.colorScheme.onPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else
+          if (mostEvent == null)
             Text(
               'Noch keine Daten vorhanden',
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            )
+          else
+            eventAsync.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(),
+              ),
+              error: (e, _) => Text(
+                'Event konnte nicht geladen werden: $e',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+              data: (event) {
+                if (event == null) {
+                  return Text(
+                    'Event nicht gefunden',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  );
+                }
+
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => EventEditScreen(event: event),
+                        ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  event
+                                      .name, // or event.eventName depending on your model
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  'Gesamt: ${mostEvent!.totalVolumeL.toStringAsFixed(1)}L',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${mostEvent!.sessionCount}x',
+                              style: TextStyle(
+                                color: theme.colorScheme.onPrimary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
         ],
       ),
