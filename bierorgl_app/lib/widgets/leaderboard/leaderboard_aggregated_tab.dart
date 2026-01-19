@@ -9,7 +9,7 @@ import 'leaderboard_list_item_container.dart';
 import 'podium_widget.dart';
 
 /// Reusable tab widget for aggregated leaderboard entries (avgTime, count, volume)
-/// Uses Riverpod providers and displays top 3 in podium + rest in list
+/// Uses Riverpod providers and displays top 3 in podium
 class LeaderboardAggregatedTab extends ConsumerWidget {
   final LeaderboardParams params;
   final LeaderboardMetric metric;
@@ -59,9 +59,6 @@ class LeaderboardAggregatedTab extends ConsumerWidget {
         }
 
         final top3 = entries.take(3).toList();
-        final rest = entries.length > 3
-            ? entries.sublist(3)
-            : <AggregatedLeaderboardEntry>[];
 
         return CustomScrollView(
           key: PageStorageKey(metric.toString()),
@@ -89,10 +86,10 @@ class LeaderboardAggregatedTab extends ConsumerWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => LeaderboardListItemContainer(
                     index: index,
-                    totalCount: rest.length,
+                    totalCount: entries.length,
                     child: LeaderboardItem<AggregatedLeaderboardEntry>(
-                      rank: index + 4,
-                      entry: rest[index],
+                      rank: index + 1,
+                      entry: entries[index],
                       getTitle: (e) => e.username ?? 'Unbekannt',
                       getSubtitle: (e) =>
                           LeaderboardFormatter.formatAggregatedSubtitle(metric),
@@ -104,7 +101,7 @@ class LeaderboardAggregatedTab extends ConsumerWidget {
                       },
                     ),
                   ),
-                  childCount: rest.length,
+                  childCount: entries.length,
                 ),
               ),
             ),

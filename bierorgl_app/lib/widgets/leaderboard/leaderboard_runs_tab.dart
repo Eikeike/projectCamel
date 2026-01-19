@@ -64,7 +64,6 @@ class LeaderboardRunsTab extends ConsumerWidget {
         }
 
         final top3 = sessions.take(3).toList();
-        final rest = sessions.length > 3 ? sessions.sublist(3) : <Session>[];
 
         return CustomScrollView(
           key: const PageStorageKey('leaderboard_runs'),
@@ -81,10 +80,10 @@ class LeaderboardRunsTab extends ConsumerWidget {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => LeaderboardListItemContainer(
                     index: index,
-                    totalCount: rest.length,
+                    totalCount: sessions.length,
                     child: LeaderboardItemSession(
-                      rank: index + 4,
-                      session: rest[index],
+                      rank: index + 1,
+                      session: sessions[index],
                       onTap: (s) {
                         Navigator.push(
                           context,
@@ -95,7 +94,7 @@ class LeaderboardRunsTab extends ConsumerWidget {
                       },
                     ),
                   ),
-                  childCount: rest.length,
+                  childCount: sessions.length,
                 ),
               ),
             ),
