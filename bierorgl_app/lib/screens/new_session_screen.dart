@@ -218,11 +218,14 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             _buildSaveButton(theme, state),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('VERWERFEN',
-                  style: TextStyle(
-                      color: theme.colorScheme.error,
-                      fontWeight: FontWeight.bold)),
+              onPressed: _handleDelete,
+              child: Text(
+                _isEditing ? 'LÖSCHEN' : 'VERWERFEN',
+                style: TextStyle(
+                  color: theme.colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
@@ -395,7 +398,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         ),
         child: state.isSaving
             ? const CircularProgressIndicator(color: Colors.white)
-            : const Text('FERTIG & SPEICHERN',
+            : const Text('SPEICHERN',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
@@ -458,5 +461,55 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _handleDelete() async {
+    // Creating new session -> just leave
+    if (!_isEditing) {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+
+        return AlertDialog(
+          title: const Text('Trichterung löschen?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(
+                'Löschen',
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await ref
+          .read(sessionRepositoryProvider)
+          .markSessionAsDeleted(widget.session!.id);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gelöscht.')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Löschen fehlgeschlagen: $e')));
+    }
   }
 }
