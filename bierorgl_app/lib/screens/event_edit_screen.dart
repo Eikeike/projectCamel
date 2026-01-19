@@ -364,9 +364,9 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: _cancelEdit,
+                  onPressed: _delete,
                   child: Text(
-                    'Verwerfen',
+                    'Löschen',
                     style: TextStyle(color: theme.colorScheme.error),
                   ),
                 ),
@@ -451,5 +451,43 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _delete() async {
+    if (widget.event == null) return;
+
+    final theme = Theme.of(context);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Event löschen?'),
+        content: const Text('Dieses Event wird gelöscht.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Löschen',
+                style: TextStyle(color: theme.colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    await ref
+        .read(eventRepositoryProvider)
+        .markEventAsDeleted(widget.event!.id);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('Event gelöscht'),
+      backgroundColor: theme.colorScheme.primary,
+    ));
+    Navigator.pop(context); // close screen after deletion
   }
 }
