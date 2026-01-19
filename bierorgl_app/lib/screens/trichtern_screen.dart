@@ -172,10 +172,7 @@ class _StatusCircle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Selektives Watching: Wir rebuilden nur diesen Kreis, wenn sich
-    // Status oder Progress ändern. Nicht den ganzen Screen.
     final connState = ref.watch(trichterConnectionProvider);
-    // Optimierung: Nur 'progress' beobachten, da 'error' im Parent behandelt wird
     final progress =
         ref.watch(trichterDataHandlerProvider.select((d) => d.progress));
 
@@ -183,65 +180,80 @@ class _StatusCircle extends ConsumerWidget {
     final status = connState.deviceStatus;
     final isConnected = connState.status == TrichterConnectionStatus.connected;
 
-    // Visual Determination Logic
+    // Visuals bestimmen
     final (Color color, IconData icon, String text) =
         _getStatusVisuals(isConnected, status, theme.colorScheme);
 
     final bool isTransferringWithProgress = progress > 0 && progress < 1;
 
-    return Container(
-      width: 280,
-      height: 280,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: theme.colorScheme.surfaceContainer,
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.3),
-            blurRadius: 25,
-            spreadRadius: 5,
-          ),
-        ],
-        border: Border.all(color: color, width: 8),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (isTransferringWithProgress)
-            SizedBox(
-              width: 80,
-              height: 80,
-              child: CircularProgressIndicator(
-                value: progress,
-                strokeWidth: 8,
-                color: color,
-                backgroundColor: color.withOpacity(0.2),
-              ),
-            )
-          else
-            Icon(
-              icon,
-              size: 80,
-              color: color,
+    // Zugriff auf den Notifier für Aktionen
+    final notifier = ref.read(trichterConnectionProvider.notifier);
+
+    return GestureDetector(
+      onTap: () {
+        // Nur wenn verbunden UND idle -> Wakeup senden
+        if (isConnected && status == TrichterDeviceStatus.idle) {
+          notifier.requestState(TrichterDeviceStatus.ready);
+        }
+      },
+      child: Container(
+        width: 280,
+        height: 280,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: theme.colorScheme.surfaceContainer,
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.3),
+              blurRadius: 25,
+              spreadRadius: 5,
             ),
-          const SizedBox(height: 20),
-          Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          if (isTransferringWithProgress)
+          ],
+          border: Border.all(color: color, width: 8),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isTransferringWithProgress)
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 8,
+                  color: color,
+                  backgroundColor: color.withOpacity(0.2),
+                ),
+              )
+            else
+              Icon(
+                // Wenn idle -> Power-Icon anzeigen, um Wakeup zu symbolisieren
+                status == TrichterDeviceStatus.idle
+                    ? Icons.power_settings_new
+                    : icon,
+                size: 80,
+                color: color,
+              ),
+            const SizedBox(height: 20),
             Text(
-              "${(progress * 100).toInt()}%",
-              style: TextStyle(
-                  color: color, fontWeight: FontWeight.bold, fontSize: 16),
-            )
-        ],
+              status == TrichterDeviceStatus.idle
+                  ? "Tippen zum \n Aufwecken"
+                  : text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            if (isTransferringWithProgress)
+              Text(
+                "${(progress * 100).toInt()}%",
+                style: TextStyle(
+                    color: color, fontWeight: FontWeight.bold, fontSize: 16),
+              )
+          ],
+        ),
       ),
     );
   }
 
-  // Pure Helper Function for logic separation
   (Color, IconData, String) _getStatusVisuals(
       bool isConnected, TrichterDeviceStatus status, ColorScheme colors) {
     if (!isConnected) {
