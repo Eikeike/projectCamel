@@ -273,7 +273,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                     style: TextStyle(
                       letterSpacing: 1.5,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
                       color: theme.colorScheme.primary,
                     )),
                 const SizedBox(height: 4),
@@ -378,8 +377,10 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         }
       },
       selectedColor: Theme.of(context).colorScheme.primary,
+      checkmarkColor: Theme.of(context).colorScheme.onPrimary,
       labelStyle: TextStyle(
-          color: selected ? Colors.white : null, fontWeight: FontWeight.bold),
+          color: selected ? Theme.of(context).colorScheme.onPrimary : null,
+          fontWeight: FontWeight.bold),
     );
   }
 
@@ -398,8 +399,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         ),
         child: state.isSaving
             ? const CircularProgressIndicator(color: Colors.white)
-            : const Text('SPEICHERN',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            : Text(
+                'SPEICHERN',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: theme.colorScheme.onPrimary,
+                ),
+              ),
       ),
     );
   }
