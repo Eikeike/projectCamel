@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/services/auto_sync_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // --- PROJEKT IMPORTS ---
@@ -46,7 +47,7 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Hintergrund-Controller am Leben erhalten
-    final autoSyncController = ref.watch(autoSyncControllerProvider);
+    ref.watch(autoSyncControllerProvider);
 
     // Theme State beobachten (Modus, SeedColor, LegacyMode)
     final themeState = ref.watch(themeProvider);
@@ -123,7 +124,7 @@ class MyApp extends ConsumerWidget {
       darkTheme: darkThemeData,
 
       // --- NAVIGATION ---
-      home: AuthGate(autoSyncController: autoSyncController),
+      home: const AuthGate(),
       routes: {
         '/bluetooth': (context) => const DeviceSelectionScreen(),
       },
@@ -132,27 +133,58 @@ class MyApp extends ConsumerWidget {
 }
 
 // Diese Klasse regelt den Zugriff (Login vs. Home)
-class AuthGate extends ConsumerWidget {
-  final dynamic autoSyncController;
-  const AuthGate({super.key, required this.autoSyncController});
+class AuthGate extends ConsumerStatefulWidget {
+  const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends ConsumerState<AuthGate> {
+  late final ProviderSubscription<AuthState> _authSub;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _authSub =
+        ref.listenManual<AuthState>(authControllerProvider, (prev, next) {
+      final wasAuthed = prev?.isAuthenticated ?? false;
+      final isAuthed = next.isAuthenticated;
+
+      if (!wasAuthed && isAuthed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ref.read(autoSyncControllerProvider).triggerSyncNow();
+        });
+      }
+      if (wasAuthed && !isAuthed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
 
-    // 1. Ladezustand prüfen
     if (authState.isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // 2. Nicht eingeloggt? -> Login Screen
     if (!authState.isAuthenticated) {
       return const LoginScreen();
     }
-
-    // 3. Eingeloggt? -> Home Screen
+    final autoSyncController = ref.read(autoSyncControllerProvider);
     return HomeScreen(autoSyncController: autoSyncController);
   }
 }

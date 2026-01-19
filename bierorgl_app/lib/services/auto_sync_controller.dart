@@ -36,8 +36,22 @@ class AutoSyncController {
     );
   }
 
+  void triggerSyncNow() {
+    if (!_enabled) return;
+    _hasPendingChanges = true; // probably würd bessser passen als true lol
+    _debounceTimer?.cancel();
+    _runIfNeeded();
+  }
+
   Future<void> _runIfNeeded() async {
     if (!_enabled) return;
+
+    final authState = _ref.read(authControllerProvider);
+    if (!authState.isAuthenticated) {
+      _hasPendingChanges = false; // drop pending while logged out
+      return;
+    }
+
     if (_isSyncing || !_hasPendingChanges) return;
 
     _isSyncing = true;
@@ -53,7 +67,8 @@ class AutoSyncController {
         // AuthRepository's interceptor already tried refresh
         // If still 401 ->it called logout() (cleared tokens).
         // tell Riverpod "auth state changed" by invalidating the provider.
-        _ref.invalidate(authControllerProvider);
+        //_ref.invalidate(authControllerProvider);
+        await _ref.read(authControllerProvider.notifier).logout();
       }
     } catch (e, s) {
       print("AutoSyncController: sync failed (unexpected): $e\n$s");

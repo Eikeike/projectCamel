@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/providers.dart';
 import 'package:project_camel/repositories/auth_repository.dart';
 import '../services/database_helper.dart';
 
@@ -54,6 +55,7 @@ class AuthController extends Notifier<AuthState> {
         userId: userId, // null => not logged in
         errorMessage: null,
       );
+      ref.read(autoSyncControllerProvider).triggerSync();
     } catch (e) {
       if (!ref.mounted) return;
       state = state.copyWith(
