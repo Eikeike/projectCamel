@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:io';
 import '../core/constants.dart';
 
 // ==========================================
@@ -72,10 +73,18 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
     return const TrichterConnectionState();
   }
 
-  void _disposeInternal() {
+ void _disposeInternal() {
     _connectionStateSubscription?.cancel();
     _statusSubscription?.cancel();
-  }
+
+    // NEU: Physische Trennung erzwingen, wenn der Provider gelöscht wird
+    final device = state.connectedDevice;
+    if (device != null) {
+      device.disconnect().catchError((_) {});
+    }
+ }
+
+
 
   Future<String?> _readFirmwareVersion(BluetoothDevice device) async {
   try {
@@ -112,55 +121,61 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
   // CONNECTION CONTROL
   // ==========================================
 
-  Future<void> connect(BluetoothDevice device) async {
-    if (state.status == TrichterConnectionStatus.connecting ||
-        state.status == TrichterConnectionStatus.connected) return;
+Future<void> connect(BluetoothDevice device) async {
+  if (state.status == TrichterConnectionStatus.connecting ||
+      state.status == TrichterConnectionStatus.connected) return;
 
-    state = state.copyWith(
-      status: TrichterConnectionStatus.connecting,
-      error: null,
+  _handleDisconnect(); // Aufräumen vor Start
+
+  state = state.copyWith(
+    status: TrichterConnectionStatus.connecting,
+    connectedDevice: device,
+    error: null,
+  );
+
+  try {
+    // NEU: Android-Fix gegen alte Cache-Verbindungen
+    if (Platform.isAndroid) {
+      try { await device.disconnect(); } catch (_) {}
+    }
+
+    // NEU: Listener VOR dem Connect starten
+    _connectionStateSubscription =
+        device.connectionState.listen((connectionStatus) {
+      if (connectionStatus == BluetoothConnectionState.disconnected) {
+        _handleDisconnect();
+      }
+    });
+
+    await device.connect(
+      timeout: const Duration(seconds: 15),
+      autoConnect: false,
+      license: License.free
     );
 
-    try {
-      await device.connect(
-        timeout: const Duration(seconds: 10),
-        autoConnect: false,
-        license: License.free,
-      );
+    await _setupStateMachine(device);
 
-      if (!ref.mounted) return;
+    final String? version = await _readFirmwareVersion(device);
 
-      _connectionStateSubscription?.cancel();
-      _connectionStateSubscription =
-          device.connectionState.listen((connectionStatus) {
-        if (connectionStatus == BluetoothConnectionState.disconnected) {
-          _handleDisconnect();
-        }
-      });
+    if (!ref.mounted) return;
 
-      await _setupStateMachine(device);
-
-      // 4. READ FIRMWARE VERSION
-      final String? version = await _readFirmwareVersion(device);
-
-      if (!ref.mounted) return;
-
-      state = state.copyWith(
-        connectedDevice: device,
-        status: TrichterConnectionStatus.connected,
-        firmwareVersion: version
-      );
-    } catch (e) {
+    state = state.copyWith(
+      connectedDevice: device,
+      status: TrichterConnectionStatus.connected,
+      firmwareVersion: version
+    );
+  } catch (e) {
+    try { await device.disconnect(); } catch (_) {}
+    if (ref.mounted) {
       state = state.copyWith(
         status: TrichterConnectionStatus.error,
         error: "Verbindung fehlgeschlagen: $e",
+        connectedDevice: null
       );
-      try {
-        await device.disconnect();
-      } catch (_) {}
     }
+    _handleDisconnect();
   }
-
+  }
 
   /// Scans for a specific device ID and connects to it.
   /// Used for seamless reconnection after a firmware update.
@@ -210,16 +225,36 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
   }
 
 
-  /// Trennt die Verbindung manuell
-  Future<void> disconnect() async {
+Future<void> disconnect() async {
     final device = state.connectedDevice;
-    if (device != null) {
+    final characteristic = _statusCharacteristic;
+
+    // SCHRITT 1: Notifications ausschalten (WICHTIG!)
+    if (characteristic != null) {
       try {
-        await device.disconnect();
+        await characteristic.setNotifyValue(false);
       } catch (_) {}
     }
-    _handleDisconnect();
+
+    // SCHRITT 2: Warten (WICHTIG!)
+    if (device != null) {
+      await Future.delayed(const Duration(milliseconds: 200));
+      try {
+        await device.disconnect();
+      } catch (e) {
+        print("Fehler beim Disconnect: $e");
+      }
+    }
+
+    // SCHRITT 3: Fallback Cleanup
+    if (ref.mounted && state.status != TrichterConnectionStatus.disconnected) {
+      await Future.delayed(const Duration(seconds: 1));
+      if (ref.mounted && state.status != TrichterConnectionStatus.disconnected) {
+        _handleDisconnect();
+      }
+    }
   }
+
 
   // ==========================================
   // DEVICE COMMANDS
@@ -269,11 +304,15 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
 
   void _handleDisconnect() {
     _connectionStateSubscription?.cancel();
+    _connectionStateSubscription = null;
+
     _statusSubscription?.cancel();
+    _statusSubscription = null;
+
     _statusCharacteristic = null;
     _stateMachineInitialized = false;
 
-    if (ref.mounted) {
+    if (ref.mounted && state.status != TrichterConnectionStatus.disconnected) {
       state = const TrichterConnectionState(
           status: TrichterConnectionStatus.disconnected);
     }

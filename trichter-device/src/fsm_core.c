@@ -40,15 +40,12 @@ void fsm_main(void *p1, void *p2, void *p3)
         {
             fsm_transition(STATE_ERROR);
             g_fsm_run = 0;
-        } else if (g_stateMachine.requestStateDeferred)
+        } else if (g_stateMachine.requestStateDeferred != STATE_MAX)
         {
-            if (g_stateMachine.requestStateDeferred != STATE_MAX)
-            {
-                fsm_transition(g_stateMachine.requestStateDeferred);
-                unsigned int key = irq_lock(); //Do not allow interrupts to request deferred
-                g_stateMachine.requestStateDeferred = STATE_MAX;
-                irq_unlock(key);
-            }
+            fsm_transition(g_stateMachine.requestStateDeferred);
+            unsigned int key = irq_lock(); //Do not allow interrupts to request deferred
+            g_stateMachine.requestStateDeferred = STATE_MAX;
+            irq_unlock(key);
         }
         k_msleep(g_stateMachine.period_ms);
     }

@@ -41,8 +41,6 @@ static bool start_sent = false;
 
 static K_TIMER_DEFINE(fsm_timer, NULL, NULL);
 
-#define BUTTONLESS
-
 void adv_timer_exp(struct k_timer *timer);
 static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
 
@@ -191,6 +189,7 @@ void on_trichter_startup()
 
 void ble_remote_state_dispatch(RemoteState state)
 {
+	printk("Received to dispatch: %d\n", state);
 	if (state >= REMOTE_STATE_CMD_MAX) return;
 	switch (state)
 	{
@@ -251,9 +250,6 @@ uint8_t ReadyRun(void)
 			if (!ble_is_adv())
 			{
 				ble_start_adv();
-				#ifndef BUTTONLOESS
-					k_timer_start(&adv_timer, K_SECONDS(120), K_NO_WAIT); //advertise for 2min max
-				#endif
 			}
 			//blinking while advertising
 			uint64_t now = k_uptime_get();

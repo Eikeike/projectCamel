@@ -114,6 +114,7 @@ uint8_t state_machine_transition(StateMachine_t *stateMachine, StateID_t targetS
         ret = ERR_TRANSITION_FORBIDDEN;
     } else {
         ret = stateMachine->current->onExit(); 
+        printk("OnExit returned %d", ret);
         if (ret != ERR_NONE && ret != ERR_NO_IMPL)
         {
             return ret;
