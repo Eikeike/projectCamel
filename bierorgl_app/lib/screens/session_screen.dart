@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart'; // Für compute
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,6 +9,7 @@ import 'package:project_camel/models/event.dart';
 import 'package:uuid/uuid.dart';
 import 'package:project_camel/core/constants.dart';
 import 'package:project_camel/providers.dart';
+// Angenommene Importe basierend auf dem Originalcode
 import '../widgets/selection_list.dart';
 import '../widgets/speed_graph.dart';
 
@@ -32,7 +34,11 @@ class SessionScreen extends ConsumerStatefulWidget {
 }
 
 class _SessionScreenState extends ConsumerState<SessionScreen> {
+  // Controller wird final definiert und in dispose aufgeräumt
   late final TextEditingController _nameController;
+
+  // Statische UUID Instanz spart Speicher bei mehrfachem Aufruf
+  static const _uuid = Uuid();
 
   String? _selectedUserID;
   String? _selectedEventID;
@@ -40,14 +46,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   bool _isSaving = false;
   Position? _currentPosition;
 
-  // Getter für saubereren Code
   bool get _isEditing => widget.session != null;
 
   @override
   void initState() {
     super.initState();
     _initializeState();
-    // Standort asynchron laden, ohne den UI-Aufbau zu blockieren
+    // Standortabfrage starten (Fire-and-forget, aber sicher)
     _getCurrentLocation();
   }
 
@@ -60,8 +65,8 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       _selectedVolumeML = s.volumeML;
     } else {
       final now = DateTime.now();
-      // DateFormat cachen wir nicht global, da es locale-abhängig sein könnte,
-      // aber wir erstellen es nur einmal hier.
+      // DateFormat lokal erstellen ist ok, da es nur einmalig bei Init passiert.
+      // Formatierung direkt in den String interpoliert.
       _nameController = TextEditingController(
           text:
               "Trichterung vom ${DateFormat('dd.MM.yyyy HH:mm').format(now)}");
@@ -99,7 +104,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
       final position = await Geolocator.getCurrentPosition();
 
-      // Nur setState rufen, wenn Widget noch aktiv ist
+      // Sicherheitscheck: Ist das Widget noch im Tree?
       if (mounted) {
         setState(() => _currentPosition = position);
       }
@@ -109,9 +114,12 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   }
 
   Future<void> _addGuestUser() async {
+    // Controller lokal halten, da er nur für den Dialog gebraucht wird
     final guestController = TextEditingController();
+
     final String? guestName = await showDialog<String>(
       context: context,
+      barrierDismissible: false, // UX: Verhindert versehentliches Schließen
       builder: (context) => AlertDialog(
         title: const Text('Gast hinzufügen'),
         content: TextField(
@@ -134,23 +142,36 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
     guestController.dispose();
 
-    if (guestName != null && guestName.isNotEmpty && mounted) {
-      final newId = const Uuid().v4();
-      // Asynchrone Operation abwarten
-      await ref.read(databaseHelperProvider).insertUser({
-        'userID': newId,
-        'name': guestName,
-        'username': 'gast_${guestName.toLowerCase().replaceAll(' ', '_')}',
-        'eMail': 'gast@bierorgl.de',
-      });
+    // Check auf mounted und validen Input
+    if (guestName != null && guestName.trim().isNotEmpty && mounted) {
+      final newId = _uuid.v4();
+      final cleanName = guestName.trim();
 
-      if (mounted) {
-        setState(() => _selectedUserID = newId);
+      try {
+        await ref.read(databaseHelperProvider).insertUser({
+          'userID': newId,
+          'name': cleanName,
+          'username': 'gast_${cleanName.toLowerCase().replaceAll(' ', '_')}',
+          'eMail': 'gast@bierorgl.de',
+        });
+
+        if (mounted) {
+          setState(() => _selectedUserID = newId);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Fehler beim Erstellen: $e'),
+                backgroundColor: Colors.red),
+          );
+        }
       }
     }
   }
 
   Future<void> _processSave() async {
+    // Validierung der UI-Inputs
     if (_selectedUserID == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -165,19 +186,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     if (_nameController.text.isEmpty || _selectedEventID == null) {
       final confirm = await showDialog<bool>(
             context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Angaben unvollständig'),
-              content: const Text(
-                  'Titel der Trichterung oder Event fehlen. Trotzdem speichern?'),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Zurück')),
-                TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Ja, egal')),
-              ],
-            ),
+            builder: (context) => const _IncompleteDataDialog(),
           ) ??
           false;
       if (!confirm) return;
@@ -187,9 +196,20 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   }
 
   Future<void> _executeFinalSave() async {
+    if (!mounted) return;
     setState(() => _isSaving = true);
 
     try {
+      // PERFORMANCE: JSON Encoding in Isolate auslagern, um Main Thread nicht zu blockieren
+      // bei großen Datenmengen (widget.allValues)
+      String? valuesJsonString;
+      if (_isEditing) {
+        valuesJsonString = widget.session!.valuesJSON;
+      } else if (widget.allValues != null) {
+        // compute führt jsonEncode im Hintergrund-Isolate aus
+        valuesJsonString = await compute(jsonEncode, widget.allValues);
+      }
+
       final session = Session(
         id: _isEditing ? widget.session!.id : '',
         volumeML: _selectedVolumeML,
@@ -206,14 +226,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         eventID: _selectedEventID,
         durationMS:
             _isEditing ? widget.session!.durationMS : (widget.durationMS ?? 0),
-        valuesJSON: _isEditing
-            ? widget.session!.valuesJSON
-            : (widget.allValues != null ? jsonEncode(widget.allValues) : null),
+        valuesJSON: valuesJsonString,
         calibrationFactor: _isEditing
             ? widget.session!.calibrationFactor
             : widget.calibrationFactor?.toInt(),
       );
 
+      // Async DB Call
       await ref
           .read(sessionRepositoryProvider)
           .saveSessionForSync(session, isEditing: _isEditing);
@@ -228,6 +247,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         );
       }
     } catch (e) {
+      debugPrint("Save Error: $e");
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context)
@@ -236,9 +256,16 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     }
   }
 
+  void _onVolumeChanged(int ml) {
+    setState(() => _selectedVolumeML = ml);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Providers beobachten
+    // Nur das Nötigste hier watchen.
+    // Wenn sich users/events ändern, wollen wir nur die Dropdowns neu bauen,
+    // aber da Scaffold so weit oben ist, ist ein Rebuild hier akzeptabel,
+    // SOLANGE die Sub-Widgets const sind.
     final usersAsync = ref.watch(usersProvider);
     final eventsAsync = ref.watch(allEventsProvider);
     final theme = Theme.of(context);
@@ -257,12 +284,12 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!_isEditing) _buildTimeHeader(theme),
+            // Extrahiertes Widget vermeidet Rebuilds
+            if (!_isEditing) _TimeHeader(durationMS: widget.durationMS ?? 0),
 
             const SizedBox(height: 24),
 
-            // Performance: RepaintBoundary verhindert, dass der Graph neu gemalt wird,
-            // wenn sich Textfelder oder andere UI-Elemente ändern.
+            // RepaintBoundary behalten: Wichtig für Performance bei Diagrammen
             if (widget.allValues != null && widget.allValues!.isNotEmpty)
               RepaintBoundary(
                 child: Padding(
@@ -276,10 +303,11 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
             const SizedBox(height: 8),
 
-            // User Selection
+            // User Selection Logic
             usersAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Text('Fehler: $e'),
+              error: (e, _) => Text('Fehler: $e',
+                  style: TextStyle(color: theme.colorScheme.error)),
               data: (users) => UserSelectionField(
                 users: users,
                 selectedUserID: _selectedUserID,
@@ -292,48 +320,62 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
             const SizedBox(height: 24),
 
-            // Form Fields
-            _buildTextFields(theme, eventsAsync),
+            // Form Fields ausgelagert
+            _SessionTextFields(
+              nameController: _nameController,
+              eventsAsync: eventsAsync,
+              selectedEventID: _selectedEventID,
+              onEventChanged: (val) => setState(() => _selectedEventID = val),
+            ),
 
             const SizedBox(height: 20),
 
-            // Volume Section
-            const Text('Volumen',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            if (!_isEditing && widget.calculatedVolumeML != null)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    'Messung: ${widget.calculatedVolumeML} ml',
-                    style: TextStyle(
-                        color: theme.colorScheme.onSurface,
-                        fontStyle: FontStyle.italic),
-                  ),
-                ),
-              ),
+            _VolumeSectionHeader(
+              isEditing: _isEditing,
+              calculatedVolumeML: widget.calculatedVolumeML,
+            ),
 
-            _buildVolumeSelector(theme),
+            // Volume Selector ausgelagert
+            _VolumeSelector(
+              selectedVolumeML: _selectedVolumeML,
+              onVolumeChanged: _onVolumeChanged,
+            ),
 
             const SizedBox(height: 40),
 
-            // Action Buttons
-            _buildActionButtons(theme),
+            // Action Buttons ausgelagert
+            _ActionButtons(
+              isSaving: _isSaving,
+              isEditing: _isEditing,
+              onSave: _processSave,
+              onCancel: () => Navigator.pop(context),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  // --- Sub-Widgets zur Strukturierung & Performance ---
+// -----------------------------------------------------------------------------
+// STANDALONE WIDGETS
+// Durch das Auslagern in eigene Klassen (statt Methoden) kann Flutter
+// effektiver cachen und unnötige Rebuilds vermeiden (const optimization).
+// -----------------------------------------------------------------------------
 
-  Widget _buildTimeHeader(ThemeData theme) {
+class _TimeHeader extends StatelessWidget {
+  final int durationMS;
+
+  const _TimeHeader({required this.durationMS});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Center(
       child: Column(
         children: [
           Text(
-            '${((widget.durationMS ?? 0) / 1000).toStringAsFixed(2)}s',
+            '${(durationMS / 1000).toStringAsFixed(2)}s',
             style: TextStyle(
                 fontSize: 72,
                 fontWeight: FontWeight.w900,
@@ -348,9 +390,24 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       ),
     );
   }
+}
 
-  Widget _buildTextFields(
-      ThemeData theme, AsyncValue<List<Event>> eventsAsync) {
+class _SessionTextFields extends StatelessWidget {
+  final TextEditingController nameController;
+  final AsyncValue<List<Event>> eventsAsync;
+  final String? selectedEventID;
+  final ValueChanged<String?> onEventChanged;
+
+  const _SessionTextFields({
+    required this.nameController,
+    required this.eventsAsync,
+    required this.selectedEventID,
+    required this.onEventChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -365,7 +422,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
           ),
         ),
         TextField(
-          controller: _nameController,
+          controller: nameController,
           style: theme.textTheme.bodyLarge,
           textCapitalization: TextCapitalization.sentences,
           decoration: InputDecoration(
@@ -393,81 +450,58 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   ?.map((e) => {'eventID': e.id, 'name': e.name})
                   .toList() ??
               [],
-          selectedEventID: _selectedEventID,
-          onChanged: (val) => setState(() => _selectedEventID = val),
+          selectedEventID: selectedEventID,
+          onChanged: onEventChanged,
         ),
       ],
     );
   }
+}
 
-  Widget _buildVolumeSelector(ThemeData theme) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _VolumeChip(
-          label: '0,33L',
-          ml: 330,
-          isSelected: _selectedVolumeML == 330,
-          onTap: () => setState(() => _selectedVolumeML = 330),
-        ),
-        _VolumeChip(
-          label: '0,5L',
-          ml: 500,
-          isSelected: _selectedVolumeML == 500,
-          onTap: () => setState(() => _selectedVolumeML = 500),
-        ),
-        _VolumeChip(
-          label: ![330, 500].contains(_selectedVolumeML)
-              ? '${_selectedVolumeML}ml'
-              : 'Custom',
-          ml: _selectedVolumeML,
-          isSelected: ![330, 500].contains(_selectedVolumeML),
-          isCustom: true,
-          onTap: _showCustomVol,
-        ),
-      ],
-    );
-  }
+class _VolumeSectionHeader extends StatelessWidget {
+  final bool isEditing;
+  final int? calculatedVolumeML;
 
-  Widget _buildActionButtons(ThemeData theme) {
+  const _VolumeSectionHeader(
+      {required this.isEditing, this.calculatedVolumeML});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       children: [
-        SizedBox(
-          width: double.infinity,
-          height: 60,
-          child: ElevatedButton(
-            onPressed: _isSaving ? null : _processSave,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _isSaving
-                ? const CircularProgressIndicator(color: Colors.white)
-                : Text(
-                    _isEditing ? 'ÄNDERUNGEN SPEICHERN' : 'FERTIG & SPEICHERN',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('VERWERFEN',
+        const SizedBox(
+            width: double.infinity,
+            child:
+                Text('Volumen', style: TextStyle(fontWeight: FontWeight.bold))),
+        const SizedBox(height: 8),
+        if (!isEditing && calculatedVolumeML != null)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: Text(
+                'Messung: $calculatedVolumeML ml',
                 style: TextStyle(
-                    color: theme.colorScheme.error,
-                    fontWeight: FontWeight.bold)),
+                    color: theme.colorScheme.onSurface,
+                    fontStyle: FontStyle.italic),
+              ),
+            ),
           ),
-        ),
       ],
     );
   }
+}
 
-  void _showCustomVol() {
+class _VolumeSelector extends StatelessWidget {
+  final int selectedVolumeML;
+  final ValueChanged<int> onVolumeChanged;
+
+  const _VolumeSelector({
+    required this.selectedVolumeML,
+    required this.onVolumeChanged,
+  });
+
+  void _showCustomVol(BuildContext context) {
     final c = TextEditingController();
     showDialog(
       context: context,
@@ -486,7 +520,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
             onPressed: () {
               final int? customVolume = int.tryParse(c.text);
               if (customVolume != null && customVolume > 0) {
-                setState(() => _selectedVolumeML = customVolume);
+                onVolumeChanged(customVolume);
               }
               Navigator.pop(context);
             },
@@ -496,22 +530,43 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _VolumeChip(
+          label: '0,33L',
+          isSelected: selectedVolumeML == 330,
+          onTap: () => onVolumeChanged(330),
+        ),
+        _VolumeChip(
+          label: '0,5L',
+          isSelected: selectedVolumeML == 500,
+          onTap: () => onVolumeChanged(500),
+        ),
+        _VolumeChip(
+          label: ![330, 500].contains(selectedVolumeML)
+              ? '${selectedVolumeML}ml'
+              : 'Custom',
+          isSelected: ![330, 500].contains(selectedVolumeML),
+          onTap: () => _showCustomVol(context),
+        ),
+      ],
+    );
+  }
 }
 
-// Helper Widget für Chips, um Rebuilds zu minimieren und Code zu säubern
 class _VolumeChip extends StatelessWidget {
   final String label;
-  final int ml;
   final bool isSelected;
-  final bool isCustom;
   final VoidCallback onTap;
 
   const _VolumeChip({
     required this.label,
-    required this.ml,
     required this.isSelected,
     required this.onTap,
-    this.isCustom = false,
   });
 
   @override
@@ -522,11 +577,92 @@ class _VolumeChip extends StatelessWidget {
       selected: isSelected,
       onSelected: (_) => onTap(),
       selectedColor: theme.colorScheme.primary,
+      // Performance: LabelStyle explizit definieren verhindert Lookups
       labelStyle: TextStyle(
         color: isSelected
             ? theme.colorScheme.onPrimary
             : theme.colorScheme.onSurface,
       ),
+    );
+  }
+}
+
+class _ActionButtons extends StatelessWidget {
+  final bool isSaving;
+  final bool isEditing;
+  final VoidCallback? onSave; // Nullable für deaktivierten Zustand
+  final VoidCallback onCancel;
+
+  const _ActionButtons({
+    required this.isSaving,
+    required this.isEditing,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 60,
+          child: ElevatedButton(
+            onPressed: isSaving ? null : onSave,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: isSaving
+                ? const SizedBox(
+                    height: 24,
+                    width: 24,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Text(
+                    isEditing ? 'ÄNDERUNGEN SPEICHERN' : 'FERTIG & SPEICHERN',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton(
+            onPressed: onCancel,
+            child: Text('VERWERFEN',
+                style: TextStyle(
+                    color: theme.colorScheme.error,
+                    fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Dialog als konstantes Widget extrahiert
+class _IncompleteDataDialog extends StatelessWidget {
+  const _IncompleteDataDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Angaben unvollständig'),
+      content: const Text(
+          'Titel der Trichterung oder Event fehlen. Trotzdem speichern?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Zurück')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Ja, egal')),
+      ],
     );
   }
 }
