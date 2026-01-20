@@ -24,12 +24,14 @@ class TrichterConnectionState {
   final TrichterConnectionStatus status;
   final TrichterDeviceStatus deviceStatus;
   final String? error;
+  final String? firmwareVersion;
 
   const TrichterConnectionState({
     this.connectedDevice,
     this.status = TrichterConnectionStatus.disconnected,
     this.deviceStatus = TrichterDeviceStatus.unknown,
     this.error,
+    this.firmwareVersion,
   });
 
   TrichterConnectionState copyWith({
@@ -37,12 +39,14 @@ class TrichterConnectionState {
     TrichterConnectionStatus? status,
     TrichterDeviceStatus? deviceStatus,
     String? error,
+    String? firmwareVersion,
   }) {
     return TrichterConnectionState(
       connectedDevice: connectedDevice ?? this.connectedDevice,
       status: status ?? this.status,
       deviceStatus: deviceStatus ?? this.deviceStatus,
       error: error,
+      firmwareVersion: firmwareVersion ?? this.firmwareVersion,
     );
   }
 }
@@ -72,6 +76,37 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
     _connectionStateSubscription?.cancel();
     _statusSubscription?.cancel();
   }
+
+  Future<String?> _readFirmwareVersion(BluetoothDevice device) async {
+  try {
+    List<BluetoothService> services = await device.discoverServices();
+    
+    final deviceInfoService = services.firstWhere(
+      (s) => s.uuid.toString().toLowerCase() == BleConstants.deviceInfoServiceUuid,
+      orElse: () => throw Exception('Device Information Service nicht gefunden'),
+    );
+
+    final firmwareCharacteristic = deviceInfoService.characteristics.firstWhere(
+      (c) => c.uuid.toString().toLowerCase() == BleConstants.firmwareRevisionUuid,
+      orElse: () => throw Exception('Firmware Revision Characteristic nicht gefunden'),
+    );
+
+    // Read the firmware version
+    final value = await firmwareCharacteristic.read();
+    final version = String.fromCharCodes(value).trim();
+    
+    return version;
+
+  } catch (e) {
+    // Non-fatal: just log the error, don't break the connection
+    if (ref.mounted) {
+      state = state.copyWith(
+        error: "Firmware-Version konnte nicht gelesen werden: $e",
+      );
+    }
+    return null;
+  }
+}
 
   // ==========================================
   // CONNECTION CONTROL
@@ -105,11 +140,15 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
 
       await _setupStateMachine(device);
 
+      // 4. READ FIRMWARE VERSION
+      final String? version = await _readFirmwareVersion(device);
+
       if (!ref.mounted) return;
 
       state = state.copyWith(
         connectedDevice: device,
         status: TrichterConnectionStatus.connected,
+        firmwareVersion: version
       );
     } catch (e) {
       state = state.copyWith(
@@ -122,6 +161,56 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
     }
   }
 
+
+  /// Scans for a specific device ID and connects to it.
+  /// Used for seamless reconnection after a firmware update.
+  Future<void> connectById(String deviceId) async {
+    // 1. Check if we are already doing something
+    if (state.status == TrichterConnectionStatus.connecting ||
+        state.status == TrichterConnectionStatus.connected) return;
+
+    state = state.copyWith(
+        status: TrichterConnectionStatus.connecting, 
+        error: "Suche Trichter..."
+    );
+
+    try {
+      BluetoothDevice? targetDevice;
+
+      // 2. Start scanning
+      // We look for the device in the results
+      var subscription = FlutterBluePlus.onScanResults.listen((results) {
+        for (ScanResult r in results) {
+          if (r.device.remoteId.toString() == deviceId) {
+            targetDevice = r.device;
+            FlutterBluePlus.stopScan(); // Found it, stop scanning
+          }
+        }
+      });
+
+      // Start the physical scan
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      
+      // Wait for scan to finish or device to be found
+      await FlutterBluePlus.isScanning.where((scanning) => scanning == false).first;
+      await subscription.cancel();
+
+      if (targetDevice != null) {
+        // 3. Reuse your existing connect logic
+        await connect(targetDevice!);
+      } else {
+        throw Exception("Trichter nicht gefunden. Bitte manuell verbinden.");
+      }
+    } catch (e) {
+      state = state.copyWith(
+        status: TrichterConnectionStatus.error,
+        error: e.toString(),
+      );
+    }
+  }
+
+
+  /// Trennt die Verbindung manuell
   Future<void> disconnect() async {
     final device = state.connectedDevice;
     if (device != null) {

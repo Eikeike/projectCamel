@@ -4,6 +4,7 @@ import 'package:project_camel/auth/auth_providers.dart';
 import '../core/constants.dart';
 import '../core/color_constants.dart';
 import '../theme/theme_provider.dart';
+import '../widgets/software_update_section.dart';
 // Importiere den neuen Provider hier (Pfad ggf. anpassen):
 import '../services/secret_settings_provider.dart';
 
@@ -218,6 +219,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ),
             ),
+            // ================================================================
+            // 2.5. FIRMWARE (Only shown when device is connected)
+            // ================================================================
+            const FirmwareUpdateSection(),
 
             // ================================================================
             // 3. GEHEIME OPTIONEN (EASTER EGG)

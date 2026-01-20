@@ -290,8 +290,9 @@ static void recycled()
     if (g_restart_adv)
     {
         ble_start_adv();
-        g_restart_adv = true;
+        g_restart_adv = false;
     }
+    //TODO: In den ready state wechseln
 }
 
 
@@ -307,9 +308,10 @@ void ble_start_adv()
     int err = 0;
     g_is_connected = 0;
     printk("Advertising started");
+    struct bt_le_adv_param *adv_param = BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN, 4000, 4400, NULL); // 3s (4800*0.625ms) - 3.25s
     if (!g_is_advertising)
     {
-        err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
+        err = bt_le_adv_start(adv_param, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
         if (err) {
             printk("Bluetooth advertising start failed (err %d)\n", err);
             return;

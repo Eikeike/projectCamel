@@ -44,6 +44,9 @@ abstract class BleConstants {
   // UUID für State Machine
   static const statusUuid = "9b6d1c3a-91a2-4f23-8c11-1a2b3c4d5e6f";
 
+  static const String deviceInfoServiceUuid = '180a';
+  static const String firmwareRevisionUuid = '2a28';
+
   // --- Protokoll (Data Handler) ---
   static const flagStart = 0xAA;
   static const flagData = 0xBB;
