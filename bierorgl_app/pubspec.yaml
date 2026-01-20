@@ -11,7 +11,7 @@ dependencies:
 
   # UI
   cupertino_icons: ^1.0.6
-  google_fonts: ^6.1.0
+  google_fonts: ^7.0.2
 
 
   # State Management
@@ -58,6 +58,9 @@ dependencies:
   geolocator: ^14.0.2
 
   fl_chart: ^0.68.0
+  http: ^1.6.0
+
+  mcumgr_flutter: ^0.8.0
 
 dev_dependencies:
   flutter_test:

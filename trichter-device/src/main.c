@@ -24,27 +24,27 @@
 #include "bluetooth.h"
 #include "memory.h"
 
-void print_thread_priorities(void)
-{
-    struct k_thread *thread_list = NULL;
-    struct k_thread *thread;
+// void print_thread_priorities(void)
+// {
+//     struct k_thread *thread_list = NULL;
+//     struct k_thread *thread;
     
-    /* Get the list of all threads */
-    thread_list = SYS_THREAD_MONITOR_HEAD;
+//     /* Get the list of all threads */
+//     thread_list = SYS_THREAD_MONITOR_HEAD;
     
-    printk("Active Threads and Priorities:\n");
-    printk("------------------------------\n");
+//     printk("Active Threads and Priorities:\n");
+//     printk("------------------------------\n");
     
-    while ((thread = thread_list) != NULL) {
-        printk("Thread %p, name: %s, priority: %d\n",
-               thread,
-               k_thread_name_get(thread),
-               k_thread_priority_get(thread));
+//     while ((thread = thread_list) != NULL) {
+//         printk("Thread %p, name: %s, priority: %d\n",
+//                thread,
+//                k_thread_name_get(thread),
+//                k_thread_priority_get(thread));
                
-        thread_list = SYS_THREAD_MONITOR_NEXT(thread_list);
-    }
-    printk("------------------------------\n");
-}
+//         thread_list = SYS_THREAD_MONITOR_NEXT(thread_list);
+//     }
+//     printk("------------------------------\n");
+// }
 
 int main(void)
 {

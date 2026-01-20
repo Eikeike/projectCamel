@@ -41,6 +41,8 @@ static bool start_sent = false;
 
 static K_TIMER_DEFINE(fsm_timer, NULL, NULL);
 
+#define BUTTONLESS
+
 void adv_timer_exp(struct k_timer *timer);
 static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
 
@@ -249,7 +251,9 @@ uint8_t ReadyRun(void)
 			if (!ble_is_adv())
 			{
 				ble_start_adv();
-				k_timer_start(&adv_timer, K_SECONDS(120), K_NO_WAIT); //advertise for 2min max
+				#ifndef BUTTONLOESS
+					k_timer_start(&adv_timer, K_SECONDS(120), K_NO_WAIT); //advertise for 2min max
+				#endif
 			}
 			//blinking while advertising
 			uint64_t now = k_uptime_get();
@@ -266,7 +270,6 @@ uint8_t ReadyRun(void)
 	}
 
 	//longpress detection
-	printk("Ready button %d\n", gpio_pin_get_dt(&button_ready));
 	/*
 	if (gpio_pin_get_dt(&button_ready) == 1)
 	{
