@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart'; // NEU: OpenStreetMap
+import 'package:latlong2/latlong.dart'; // NEU: Koordinaten Helper
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:project_camel/providers.dart';
 import 'package:uuid/uuid.dart';
 import 'package:project_camel/models/session.dart';
-import 'package:project_camel/models/event.dart';
 
 import '../services/session_calculator_service.dart';
 import '../services/session_state_provider.dart';
@@ -35,10 +36,13 @@ class SessionScreen extends ConsumerStatefulWidget {
 
 class _SessionScreenState extends ConsumerState<SessionScreen> {
   late final TextEditingController _nameController;
+
+  // Location & Map State
   Position? _currentPosition;
+  final MapController _mapController = MapController();
+  bool _isLoadingLocation = false;
 
   bool get _isEditing => widget.session != null;
-  bool _isSaving = false;
 
   int get _effectiveDurationMS =>
       _isEditing ? (widget.session?.durationMS ?? 0) : (widget.durationMS ?? 0);
@@ -60,6 +64,22 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   double get _effectiveCalibrationFactor => _isEditing
       ? (widget.session?.calibrationFactor?.toDouble() ?? 200.0)
       : (widget.calibrationFactor ?? 200.0);
+
+  // Helper um zu entscheiden, welche Koordinaten angezeigt werden
+  LatLng? get _displayLatLng {
+    // 1. Wenn wir eine aktive Position ermittelt haben (neu oder update), nimm diese
+    if (_currentPosition != null) {
+      return LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+    }
+    // 2. Sonst, wenn wir eine Session bearbeiten und Koordinaten da sind, nimm diese
+    if (widget.session != null &&
+        widget.session!.latitude != 0 &&
+        widget.session!.latitude != null) {
+      return LatLng(widget.session!.latitude!, widget.session!.longitude!);
+    }
+    // 3. Sonst nichts
+    return null;
+  }
 
   @override
   void initState() {
@@ -85,24 +105,77 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       }
     });
 
-    _determineLocation();
+    // Nur Standort ermitteln, wenn es eine NEUE Session ist.
+    // Beim Bearbeiten lassen wir den alten Standort, bis der User aktiv aktualisiert.
+    if (!_isEditing) {
+      _determineLocation();
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    // MapController muss in der Regel nicht explizit disposed werden in flutter_map,
+    // aber man sollte vorsichtig sein bei komplexen Listenern. Hier ist es ok.
     super.dispose();
   }
 
+  /// Ermittelt den Standort einmalig (für Init)
   Future<void> _determineLocation() async {
     try {
       LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
       if (permission == LocationPermission.always ||
           permission == LocationPermission.whileInUse) {
-        _currentPosition = await Geolocator.getCurrentPosition();
+        final position = await Geolocator.getCurrentPosition();
+        if (mounted) {
+          setState(() {
+            _currentPosition = position;
+          });
+        }
       }
     } catch (e) {
       debugPrint("Location error: $e");
+    }
+  }
+
+  /// Manuelles Update des Standorts via Button
+  Future<void> _updateLocation() async {
+    setState(() => _isLoadingLocation = true);
+
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always) {
+        final position = await Geolocator.getCurrentPosition();
+
+        if (mounted) {
+          setState(() {
+            _currentPosition = position;
+            _isLoadingLocation = false;
+          });
+
+          // Karte auf neue Position zentrieren
+          _mapController.move(
+              LatLng(position.latitude, position.longitude), 15.0);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Standort aktualisiert')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingLocation = false);
+        debugPrint("Location error: $e");
+      }
     }
   }
 
@@ -113,7 +186,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     if (state.selectedUserID == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text('Wer hat getrichtert?'),
+            content: const Text('Wer hat getrichtert?'),
             backgroundColor: Theme.of(context).colorScheme.error),
       );
       return;
@@ -122,17 +195,22 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
     notifier.setSaving(true);
 
     try {
+      // Koordinaten Logik beim Speichern:
+      // 1. Wenn _currentPosition gesetzt ist (neu oder manuell geupdated), nimm das.
+      // 2. Sonst nimm die alten Session Daten (falls vorhanden).
+      // 3. Sonst 0.0
+      final double lat =
+          _currentPosition?.latitude ?? widget.session?.latitude ?? 0.0;
+      final double lng =
+          _currentPosition?.longitude ?? widget.session?.longitude ?? 0.0;
+
       final session = Session(
         id: _isEditing ? widget.session!.id : const Uuid().v4(),
         volumeML: state.selectedVolumeML,
         name: _nameController.text.isNotEmpty ? _nameController.text : null,
         description: _isEditing ? widget.session?.description : null,
-        latitude: _isEditing
-            ? (widget.session?.latitude ?? 0.0)
-            : (_currentPosition?.latitude ?? 0.0),
-        longitude: _isEditing
-            ? (widget.session?.longitude ?? 0.0)
-            : (_currentPosition?.longitude ?? 0.0),
+        latitude: lat,
+        longitude: lng,
         startedAt: _isEditing ? widget.session!.startedAt : DateTime.now(),
         userID: state.selectedUserID ?? '',
         eventID: state.selectedEventID,
@@ -170,7 +248,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print(widget.session?.valuesJSON);
     final state = ref.watch(sessionStateProvider);
     final theme = Theme.of(context);
 
@@ -212,6 +289,11 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
               onChanged: (id) =>
                   ref.read(sessionStateProvider.notifier).selectEvent(id!),
             ),
+            const SizedBox(height: 24),
+
+            // NEU: Die OSM Karte
+            _buildLocationMap(theme),
+
             const SizedBox(height: 32),
             _buildVolumeSection(theme, state),
             const SizedBox(height: 48),
@@ -232,6 +314,142 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
       ),
     );
   }
+
+  // --- NEUE WIDGET METHODE FÜR DIE KARTE ---
+  // --- MAP WIDGET IM EVENT-EDIT STYLE ---
+  Widget _buildLocationMap(ThemeData theme) {
+    // Wenn kein Standort, nimm Default (z.B. Mitte Deutschland)
+    final center = _displayLatLng ?? const LatLng(51.1657, 10.4515);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    // Standard OSM URL
+    const mapUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    // Matrix zum Invertieren der Farben (Dark Mode Filter)
+    const invertMatrix = <double>[
+      -0.2126, -0.7152, -0.0722, 0, 255, // Red channel
+      -0.2126, -0.7152, -0.0722, 0, 255, // Green channel
+      -0.2126, -0.7152, -0.0722, 0, 255, // Blue channel
+      0, 0, 0, 1, 0, // Alpha channel
+    ];
+
+    return Column(
+      children: [
+        Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 300,
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: _displayLatLng != null ? 15.0 : 5.0,
+                    interactionOptions: const InteractionOptions(
+                      // Beim Speichern meist nur Anzeige, aber Verschieben erlauben wir
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
+                  ),
+                  children: [
+                    // --- TILE LAYER MIT COLORFILTER ---
+                    isDarkMode
+                        ? ColorFiltered(
+                            colorFilter: const ColorFilter.matrix(invertMatrix),
+                            child: TileLayer(
+                              urlTemplate: mapUrl,
+                              userAgentPackageName: 'com.camel.project_camel',
+                            ),
+                          )
+                        : TileLayer(
+                            urlTemplate: mapUrl,
+                            userAgentPackageName: 'com.camel.project_camel',
+                          ),
+
+                    // Marker Layer (WICHTIG: Außerhalb des ColorFiltered)
+                    MarkerLayer(
+                      markers: [
+                        if (_displayLatLng != null)
+                          Marker(
+                            point: _displayLatLng!,
+                            width: 40,
+                            height: 40,
+                            child: Icon(
+                              Icons.location_on,
+                              color: theme.colorScheme.primary,
+                              size: 40,
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    RichAttributionWidget(
+                      animationConfig: const ScaleRAWA(),
+                      attributions: [
+                        TextSourceAttribution('OpenStreetMap contributors',
+                            onTap: () {}),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Button oben rechts (wie im Event Edit Screen)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Container(
+                decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.2), blurRadius: 6)
+                    ]),
+                child: IconButton(
+                  onPressed: _isLoadingLocation ? null : _updateLocation,
+                  icon: _isLoadingLocation
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: theme.colorScheme.primary))
+                      : Icon(Icons.my_location,
+                          color: theme.colorScheme.primary),
+                  tooltip: 'Standort aktualisieren',
+                ),
+              ),
+            ),
+
+            // Info Overlay, wenn kein Standort da ist
+            if (_displayLatLng == null)
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Kein Standort verfügbar',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // --- BESTEHENDE UI METHODEN ---
 
   Widget _buildStatCarousel(ThemeData theme, double avgFlow, double peakFlow) {
     final List<Map<String, String>> stats = [
@@ -290,22 +508,6 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildTimeHeader(ThemeData theme) {
-    return Column(
-      children: [
-        Text(
-          '${((widget.durationMS ?? 0) / 1000).toStringAsFixed(2)}s',
-          style: theme.textTheme.displayLarge?.copyWith(
-            fontWeight: FontWeight.w900,
-            color: theme.colorScheme.primary,
-          ),
-        ),
-        const Text('GESAMTZEIT',
-            style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)),
-      ],
     );
   }
 

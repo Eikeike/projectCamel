@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
@@ -22,10 +24,10 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
   late TextEditingController _descController;
   late TextEditingController _dateFromController;
   late TextEditingController _dateToController;
-  late TextEditingController _latController;
-  late TextEditingController _lonController;
 
-  Position? _currentPosition;
+  final MapController _mapController = MapController();
+  LatLng? _selectedLocation;
+  bool _isLoadingLocation = false;
 
   final _dateFmt = DateFormat('dd.MM.yyyy');
 
@@ -34,7 +36,7 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
   @override
   void initState() {
     super.initState();
-    _isEditing = widget.event == null; // create mode -> editing by default
+    _isEditing = widget.event == null;
     _resetFieldsFromEvent();
   }
 
@@ -47,10 +49,12 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
         text: e?.dateFrom != null ? _dateFmt.format(e!.dateFrom!) : '');
     _dateToController = TextEditingController(
         text: e?.dateTo != null ? _dateFmt.format(e!.dateTo!) : '');
-    _latController =
-        TextEditingController(text: e?.latitude?.toStringAsFixed(6) ?? '');
-    _lonController =
-        TextEditingController(text: e?.longitude?.toStringAsFixed(6) ?? '');
+
+    if (e?.latitude != null && e?.longitude != null) {
+      _selectedLocation = LatLng(e!.latitude!, e.longitude!);
+    } else {
+      _selectedLocation = null;
+    }
   }
 
   @override
@@ -59,8 +63,6 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
     _descController.dispose();
     _dateFromController.dispose();
     _dateToController.dispose();
-    _latController.dispose();
-    _lonController.dispose();
     super.dispose();
   }
 
@@ -85,27 +87,40 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
   }
 
   Future<void> _getCurrentLocation() async {
+    setState(() => _isLoadingLocation = true);
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
+      if (!serviceEnabled) {
+        setState(() => _isLoadingLocation = false);
+        return;
+      }
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return;
+        if (permission == LocationPermission.denied) {
+          setState(() => _isLoadingLocation = false);
+          return;
+        }
       }
-      if (permission == LocationPermission.deniedForever) return;
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _isLoadingLocation = false);
+        return;
+      }
 
-      _currentPosition = await Geolocator.getCurrentPosition();
-      if (_currentPosition != null && mounted) {
+      final position = await Geolocator.getCurrentPosition();
+
+      if (mounted) {
         setState(() {
-          _latController.text = _currentPosition!.latitude.toStringAsFixed(6);
-          _lonController.text = _currentPosition!.longitude.toStringAsFixed(6);
+          _selectedLocation = LatLng(position.latitude, position.longitude);
+          _isLoadingLocation = false;
         });
+
+        _mapController.move(_selectedLocation!, 15.0);
       }
     } catch (e) {
-      // ignore errors silently for now
       debugPrint('Location error: $e');
+      if (mounted) setState(() => _isLoadingLocation = false);
     }
   }
 
@@ -115,12 +130,10 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
 
   void _cancelEdit() {
     if (widget.event == null) {
-      // If creating, cancel means pop
       if (mounted) Navigator.pop(context);
       return;
     }
 
-    // Reset fields back to event values and switch out of edit mode
     setState(() {
       final e = widget.event!;
       _nameController.text = e.name;
@@ -129,8 +142,17 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
           e.dateFrom != null ? _dateFmt.format(e.dateFrom!) : '';
       _dateToController.text =
           e.dateTo != null ? _dateFmt.format(e.dateTo!) : '';
-      _latController.text = e.latitude?.toStringAsFixed(6) ?? '';
-      _lonController.text = e.longitude?.toStringAsFixed(6) ?? '';
+
+      if (e.latitude != null && e.longitude != null) {
+        _selectedLocation = LatLng(e.latitude!, e.longitude!);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_selectedLocation != null)
+            _mapController.move(_selectedLocation!, 15);
+        });
+      } else {
+        _selectedLocation = null;
+      }
+
       _isEditing = false;
     });
   }
@@ -142,11 +164,6 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
     } catch (_) {
       return null;
     }
-  }
-
-  double? _parseDouble(String text) {
-    if (text.isEmpty) return null;
-    return double.tryParse(text.replaceAll(',', '.'));
   }
 
   Future<void> _save() async {
@@ -169,8 +186,8 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
           _descController.text.isNotEmpty ? _descController.text : null,
       dateFrom: _parseDate(_dateFromController.text),
       dateTo: _parseDate(_dateToController.text),
-      latitude: _parseDouble(_latController.text),
-      longitude: _parseDouble(_lonController.text),
+      latitude: _selectedLocation?.latitude,
+      longitude: _selectedLocation?.longitude,
     );
 
     await ref.read(eventRepositoryProvider).saveEventForSync(event);
@@ -214,38 +231,31 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Name
             TextField(
               controller: _nameController,
               readOnly: !_isEditing,
               enabled: _isEditing,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Event Name',
                 hintText: 'Z.B. Sommerfest 2026',
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Description
             TextField(
               controller: _descController,
               readOnly: !_isEditing,
               enabled: _isEditing,
               maxLines: 4,
               minLines: 3,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Beschreibung',
                 hintText: 'Kurze Beschreibung (optional)',
-                border: const OutlineInputBorder(),
+                border: OutlineInputBorder(),
                 alignLabelWithHint: true,
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Date From / To
             Row(
               children: [
                 Expanded(
@@ -291,58 +301,22 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
                 ),
               ],
             ),
-
-            const SizedBox(height: 16),
-
-            // Latitude / Longitude
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _latController,
-                    readOnly: !_isEditing,
-                    enabled: _isEditing,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Latitude',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _lonController,
-                    readOnly: !_isEditing,
-                    enabled: _isEditing,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(
-                      labelText: 'Longitude',
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            if (_isEditing)
+            const SizedBox(height: 24),
+            Text('Veranstaltungsort',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            _buildLocationMap(theme),
+            if (_selectedLocation != null)
               Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _getCurrentLocation,
-                    icon: const Icon(Icons.my_location),
-                    label: const Text('Aktuellen Standort nutzen'),
-                  ),
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  '${_selectedLocation!.latitude.toStringAsFixed(6)}, ${_selectedLocation!.longitude.toStringAsFixed(6)}',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
-
             const SizedBox(height: 24),
-
-            // Action buttons
             if (_isEditing) ...[
               SizedBox(
                 width: double.infinity,
@@ -358,8 +332,6 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
               ),
               const SizedBox(height: 8),
             ],
-
-            // Delete button (only in edit mode)
             if (widget.event != null && _isEditing)
               SizedBox(
                 width: double.infinity,
@@ -371,18 +343,6 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
                   ),
                 ),
               ),
-
-            // Close button (only in view mode)
-            // if (!_isEditing)
-            //   SizedBox(
-            //     width: double.infinity,
-            //     child: TextButton(
-            //       onPressed: () => Navigator.pop(context),
-            //       child: const Text('Schließen'),
-            //     ),
-            //   ),
-
-            // Session history (only in display mode)
             if (!_isEditing && widget.event != null) ...[
               const SizedBox(height: 32),
               _buildSessionHistory(),
@@ -390,6 +350,143 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  // --- MAP WIDGET MIT DARK MODE FILTER ---
+  Widget _buildLocationMap(ThemeData theme) {
+    final center = _selectedLocation ?? const LatLng(51.1657, 10.4515);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    // Standard OSM URL
+    const mapUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    // Matrix zum Invertieren der Farben (Dark Mode Filter)
+    const invertMatrix = <double>[
+      -0.2126, -0.7152, -0.0722, 0, 255, // Red channel
+      -0.2126, -0.7152, -0.0722, 0, 255, // Green channel
+      -0.2126, -0.7152, -0.0722, 0, 255, // Blue channel
+      0, 0, 0, 1, 0, // Alpha channel
+    ];
+
+    return Column(
+      children: [
+        Stack(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 300,
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: _selectedLocation != null ? 15.0 : 5.0,
+                    interactionOptions: InteractionOptions(
+                      flags: _isEditing
+                          ? (InteractiveFlag.all & ~InteractiveFlag.rotate)
+                          : InteractiveFlag.none,
+                    ),
+                    onTap: _isEditing
+                        ? (tapPos, point) {
+                            setState(() {
+                              _selectedLocation = point;
+                            });
+                          }
+                        : null,
+                  ),
+                  children: [
+                    // --- TILE LAYER MIT COLORFILTER ---
+                    isDarkMode
+                        ? ColorFiltered(
+                            colorFilter: const ColorFilter.matrix(invertMatrix),
+                            child: TileLayer(
+                              urlTemplate: mapUrl,
+                              userAgentPackageName: 'com.example.project_camel',
+                            ),
+                          )
+                        : TileLayer(
+                            urlTemplate: mapUrl,
+                            userAgentPackageName: 'com.example.project_camel',
+                          ),
+
+                    // Marker Layer (WICHTIG: Außerhalb des ColorFiltered, damit Marker rot bleiben)
+                    MarkerLayer(
+                      markers: [
+                        if (_selectedLocation != null)
+                          Marker(
+                            point: _selectedLocation!,
+                            width: 40,
+                            height: 40,
+                            child: Icon(
+                              Icons.location_on,
+                              color: theme.colorScheme.primary,
+                              size: 40,
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    RichAttributionWidget(
+                      attributions: [
+                        TextSourceAttribution('OpenStreetMap contributors',
+                            onTap: () {}),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isEditing)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.2), blurRadius: 6)
+                      ]),
+                  child: IconButton(
+                    onPressed: _isLoadingLocation ? null : _getCurrentLocation,
+                    icon: _isLoadingLocation
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: theme.colorScheme.primary))
+                        : Icon(Icons.my_location,
+                            color: theme.colorScheme.primary),
+                    tooltip: 'Mein Standort',
+                  ),
+                ),
+              ),
+            if (_isEditing && _selectedLocation == null)
+              Positioned(
+                bottom: 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Tippe auf die Karte, um den Ort zu setzen',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -488,6 +585,6 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
       content: const Text('Event gelöscht'),
       backgroundColor: theme.colorScheme.primary,
     ));
-    Navigator.pop(context); // close screen after deletion
+    Navigator.pop(context);
   }
 }
