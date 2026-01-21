@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart'; // NEU
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/models/session.dart';
 import 'package:project_camel/models/event.dart';
 import 'package:project_camel/providers.dart';
 import 'package:project_camel/screens/event_edit_screen.dart';
-import 'package:project_camel/screens/new_session_screen.dart';
+// import 'package:project_camel/screens/new_session_screen.dart';
 import 'package:project_camel/widgets/pie_chart.dart';
 import 'package:project_camel/widgets/session_list.dart';
 import '../auth/auth_providers.dart';
+import '../screens/new_session_screen.dart';
 import 'settings_screen.dart';
 
 // ===========================================================================
-// DATA OBJECT FOR VIEW STATS (Optimierung: Trennung von Logik & UI)
+// DATA OBJECT FOR VIEW STATS
 // ===========================================================================
 class _ProfileViewStats {
   final int count;
@@ -32,8 +36,7 @@ class _ProfileViewStats {
 }
 
 // ===========================================================================
-// INTERNAL PROVIDER (Optimierung: Memoization der Berechnungen)
-// Berechnet Statistiken nur neu, wenn sich Sessions oder Filter ändern.
+// INTERNAL PROVIDER
 // ===========================================================================
 final _profileStatsProvider = Provider.autoDispose
     .family<_ProfileViewStats, List<Session>>((ref, allSessions) {
@@ -64,7 +67,6 @@ final _profileStatsProvider = Provider.autoDispose
   final totalCount = filteredSessions.length;
   double totalVolumeL = 0.0;
 
-  // Single pass loop für Volume und Min-Suche (Performance)
   int minMS =
       filteredSessions.isNotEmpty ? filteredSessions.first.durationMS : 0;
 
@@ -140,7 +142,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Optimierung: Select verwenden, um Rebuilds zu vermeiden, wenn sich andere Auth-Properties ändern
     final authLoading =
         ref.watch(authControllerProvider.select((s) => s.isLoading));
     if (authLoading) {
@@ -150,8 +151,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final userId = ref.watch(authControllerProvider.select((s) => s.userId));
     if (userId == null) return _buildNoUserUI(context);
 
-    // Optimierung: Parallelisierung der Datenabfragen ist hier nicht trivial möglich ohne Logic-Change,
-    // aber wir cachen die AsyncValues, um unnötige "when"-Kaskaden im Build zu glätten.
     final userAsync = ref.watch(userByIdProvider(userId));
     final userSessionsAsync = ref.watch(sessionsByUserIDProvider(userId));
     final userTopEventsAsync = ref.watch(topEventsByUserProvider(userId));
@@ -176,7 +175,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               error: (e, _) =>
                   Center(child: Text('Fehler beim Laden der Historie: $e')),
               data: (allSessions) {
-                // Extraktion der Top Events, falls geladen
                 final topEvents = userTopEventsAsync.asData?.value;
                 final mostFrequentEvent =
                     (topEvents != null && topEvents.isNotEmpty)
@@ -190,22 +188,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       const _SettingsButton(),
 
-                      // Statische User Info - extracted widget
+                      // Statische User Info
                       _UserInfoHeader(user: user),
                       const SizedBox(height: 24),
 
-                      // Filter Section - extracted to avoid rebuilding header
+                      // Filter Section
                       const _FilterSection(),
                       const SizedBox(height: 24),
 
-                      // Stats Grid - Berechnungen via Provider ausgelagert
+                      // Stats Grid
                       _StatsSection(allSessions: allSessions),
                       const SizedBox(height: 24),
 
-                      // Charts - RepaintBoundary for GPU optimization
+                      // Charts
                       RepaintBoundary(
                         child: _PieChartSection(allSessions: allSessions),
                       ),
+                      const SizedBox(height: 24),
+
+                      // MAP CARD (Nur Light Mode)
+                      _LocationsCard(sessions: allSessions),
                       const SizedBox(height: 24),
 
                       // Top Event
@@ -254,8 +256,174 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 }
 
 // ===========================================================================
-// SUB-WIDGETS (Optimierung: Granulare Rebuilds & Const Constructors)
+// SUB-WIDGETS
 // ===========================================================================
+
+class _LocationsCard extends StatelessWidget {
+  final List<Session> sessions;
+
+  const _LocationsCard({required this.sessions});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDarkMode = theme.brightness == Brightness.dark;
+
+    // 1. Prepare data (filter invalid coordinates)
+    final validPoints = sessions
+        .where((s) =>
+            s.latitude != 0 &&
+            s.longitude != 0 &&
+            s.latitude != null &&
+            s.longitude != null)
+        .map((s) => LatLng(s.latitude!, s.longitude!))
+        .toList();
+
+    if (validPoints.isEmpty) return const SizedBox.shrink();
+
+    // 2. Create Marker List
+    final List<Marker> markers = validPoints.map((point) {
+      return Marker(
+        point: point,
+        width: 30,
+        height: 30,
+        child: Icon(
+          Icons.location_on,
+          color: theme.colorScheme.primary,
+          size: 30,
+        ),
+      );
+    }).toList();
+
+    // Standard OSM URL
+    const mapUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    // Matrix to invert colors (Dark Mode Filter)
+    const invertMatrix = <double>[
+      -0.2126, -0.7152, -0.0722, 0, 255, // Red channel
+      -0.2126, -0.7152, -0.0722, 0, 255, // Green channel
+      -0.2126, -0.7152, -0.0722, 0, 255, // Blue channel
+      0, 0, 0, 1, 0, // Alpha channel
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title directly above the map (no longer inside a container)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.map_outlined, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Trichter-Orte',
+                    style: TextStyle(
+                      fontSize: theme.textTheme.titleMedium?.fontSize,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '${validPoints.length} Orte',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // The Map itself
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 300, // Taller, like in the Edit Screen
+            child: FlutterMap(
+              options: MapOptions(
+                initialCameraFit: CameraFit.coordinates(
+                  coordinates: validPoints,
+                  padding: const EdgeInsets.all(50),
+                  maxZoom: 15.0,
+                ),
+                interactionOptions: const InteractionOptions(
+                  // Disable scrolling so the user can scroll the profile page
+                  flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+                ),
+              ),
+              children: [
+                // --- TILE LAYER WITH COLOR FILTER ---
+                isDarkMode
+                    ? ColorFiltered(
+                        colorFilter: const ColorFilter.matrix(invertMatrix),
+                        child: TileLayer(
+                          urlTemplate: mapUrl,
+                          userAgentPackageName: 'com.example.project_camel',
+                        ),
+                      )
+                    : TileLayer(
+                        urlTemplate: mapUrl,
+                        userAgentPackageName: 'com.example.project_camel',
+                      ),
+
+                // CLUSTERING (Still useful for many points)
+                MarkerClusterLayerWidget(
+                  options: MarkerClusterLayerOptions(
+                    maxClusterRadius: 45,
+                    size: const Size(40, 40),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.all(50),
+                    markers: markers,
+                    builder: (context, markers) {
+                      return Container(
+                        decoration: BoxDecoration(
+                            color: theme.colorScheme.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: theme.colorScheme.onPrimaryContainer,
+                                width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3))
+                            ]),
+                        alignment: Alignment.center,
+                        child: Text(
+                          markers.length.toString(),
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // Attribution with color logic
+                RichAttributionWidget(
+                  animationConfig: const ScaleRAWA(),
+                  attributions: [
+                    TextSourceAttribution(
+                      'OpenStreetMap contributors',
+                      onTap: () {},
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _SettingsButton extends StatelessWidget {
   const _SettingsButton();
@@ -437,7 +605,6 @@ class _StatsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Hier wird der interne Provider genutzt -> Rebuild nur wenn sich Ergebnis ändert
     final stats = ref.watch(_profileStatsProvider(allSessions));
 
     return Column(
@@ -601,8 +768,7 @@ class _MostEventCard extends ConsumerWidget {
 
     final eventAsync = (mostEvent == null)
         ? const AsyncValue<Event?>.data(null)
-        : ref.watch(eventByIdProvider(
-            mostEvent!.eventId)); // <-- use your id field name
+        : ref.watch(eventByIdProvider(mostEvent!.eventId));
 
     return Container(
       width: double.infinity,
@@ -663,8 +829,7 @@ class _MostEventCard extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  event
-                                      .name, // or event.eventName depending on your model
+                                  event.name,
                                   style: const TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w500,
@@ -717,7 +882,6 @@ class _HistorySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Frühzeitiger Return für leere Listen, um unnötige List-Widgets zu vermeiden
     if (sessions.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -739,7 +903,6 @@ class _HistorySection extends StatelessWidget {
         const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
-          // PageStorageKey beibehalten für Scrollposition-Persistenz
           child: SessionList(
             key: const PageStorageKey('sessionsByUserList'),
             sessions: sessions,
