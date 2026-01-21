@@ -8,6 +8,7 @@ class SessionList extends StatelessWidget {
     super.key,
     required this.sessions,
     required this.onSessionTap,
+    this.showAvatar = true,
     this.embedded = false,
   });
 
@@ -17,6 +18,8 @@ class SessionList extends StatelessWidget {
   /// If true, the list is rendered without Align/FractionallySizedBox and with
   /// shrinkWrap, so it can be embedded in a Column / SingleChildScrollView.
   final bool embedded;
+
+  final bool showAvatar;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +57,7 @@ class SessionList extends StatelessWidget {
             borderRadius: borderRadius,
           ),
           child: SessionListTile(
+            showAvatar: showAvatar,
             session: session,
             onTap: () => onSessionTap(session),
           ),

@@ -744,6 +744,7 @@ class _HistorySection extends StatelessWidget {
             key: const PageStorageKey('sessionsByUserList'),
             sessions: sessions,
             embedded: true,
+            showAvatar: false,
             onSessionTap: (session) {
               Navigator.push(
                 context,

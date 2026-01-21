@@ -75,7 +75,7 @@ class SessionListTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -95,8 +95,7 @@ class SessionListTile extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                    style: textTheme.titleSmall?.copyWith(
                       color: cs.onSurface,
                     ),
                   ),
@@ -115,7 +114,8 @@ class SessionListTile extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(width: 12),
+            //const SizedBox(width: 0),
+            //const SizedBox(height: 50),
 
             // ---------- Duration Right Side ----------
             Text(

@@ -10,14 +10,14 @@ class LeaderboardFilters {
 
   const LeaderboardFilters({
     this.userIDs = const {},
-    this.volume = VolumeFilter.all,
+    this.volume = VolumeFilter.l05,
     this.eventID = 'Alle',
     this.sortOrder = 'Schnellste zuerst',
   });
 
   /// Check if any filter is active (not in default state)
   bool get hasActive =>
-      userIDs.isNotEmpty || volume != VolumeFilter.all || eventID != 'Alle';
+      userIDs.isNotEmpty || volume != VolumeFilter.l05 || eventID != 'Alle';
 
   /// Create a copy with optional field overrides
   LeaderboardFilters copyWith({

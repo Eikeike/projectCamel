@@ -33,7 +33,7 @@ class LeaderboardItem<T> extends StatelessWidget {
     final initial = getInitial(entry);
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
       onTap: onTap == null ? null : () => onTap!(entry),
       leading: Row(
         mainAxisSize: MainAxisSize.min,
