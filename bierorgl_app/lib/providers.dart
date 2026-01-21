@@ -178,9 +178,9 @@ final leaderboardTotalVolumeProvider =
     bus: bus.stream,
     topic: DbTopic.sessions,
     query: () => repo.getLeaderboardTotalVolume(
-      userIDs: params.userIDs,
-      eventID: params.eventID,
-    ),
+        userIDs: params.userIDs,
+        eventID: params.eventID,
+        volumeML: params.volumeML),
   );
 });
 
@@ -194,9 +194,9 @@ final leaderboardSessionCountProvider =
     bus: bus.stream,
     topic: DbTopic.sessions,
     query: () => repo.getSessionCountAgg(
-      userIDs: params.userIDs,
-      eventID: params.eventID,
-    ),
+        userIDs: params.userIDs,
+        eventID: params.eventID,
+        volumeML: params.volumeML),
   );
 });
 
@@ -210,9 +210,9 @@ final leaderboardAvgSecondsPerLiterProvider =
     bus: bus.stream,
     topic: DbTopic.sessions,
     query: () => repo.getUserSecondsPerLiter(
-      userIDs: params.userIDs,
-      eventID: params.eventID,
-    ),
+        userIDs: params.userIDs,
+        eventID: params.eventID,
+        volumeML: params.volumeML),
   );
 });
 

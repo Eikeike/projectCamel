@@ -264,6 +264,7 @@ class SessionRepository {
   Future<List<AggregatedLeaderboardEntry>> getUserSecondsPerLiter({
     Set<String>? userIDs,
     String? eventID,
+    int? volumeML,
   }) async {
     final db = await _db.database;
 
@@ -283,6 +284,11 @@ class SessionRepository {
     if (eventID != null && eventID.isNotEmpty) {
       where.add('s.eventID = ?');
       args.add(eventID);
+    }
+
+    if (volumeML != null) {
+      where.add('s.volumeML = ?');
+      args.add(volumeML);
     }
 
     final sql = '''
@@ -314,6 +320,7 @@ class SessionRepository {
   Future<List<AggregatedLeaderboardEntry>> getSessionCountAgg({
     Set<String>? userIDs,
     String? eventID,
+    int? volumeML,
   }) async {
     final db = await _db.database;
 
@@ -333,6 +340,11 @@ class SessionRepository {
     if (eventID != null && eventID.isNotEmpty) {
       where.add('s.eventID = ?');
       args.add(eventID);
+    }
+
+    if (volumeML != null) {
+      where.add('s.volumeML = ?');
+      args.add(volumeML);
     }
 
     final sql = '''
@@ -361,10 +373,8 @@ class SessionRepository {
         .toList();
   }
 
-  Future<List<AggregatedLeaderboardEntry>> getLeaderboardTotalVolume({
-    Set<String>? userIDs,
-    String? eventID,
-  }) async {
+  Future<List<AggregatedLeaderboardEntry>> getLeaderboardTotalVolume(
+      {Set<String>? userIDs, String? eventID, int? volumeML}) async {
     final db = await _db.database;
 
     final where = <String>['s.localDeletedAt IS NULL'];
@@ -383,6 +393,11 @@ class SessionRepository {
     if (eventID != null && eventID.isNotEmpty) {
       where.add('s.eventID = ?');
       args.add(eventID);
+    }
+    if (volumeML != null) {
+      print("TTTTIIIIIM $volumeML");
+      where.add('s.volumeML = ?');
+      args.add(volumeML);
     }
 
     final sql = '''

@@ -9,6 +9,14 @@ PODS:
   - geolocator_apple (1.2.0):
     - Flutter
     - FlutterMacOS
+  - iOSMcuManagerLibrary (1.12):
+    - SwiftCBOR (= 0.5.0)
+    - ZIPFoundation (= 0.9.19)
+  - mcumgr_flutter (0.8.0):
+    - Flutter
+    - FlutterMacOS
+    - iOSMcuManagerLibrary (= 1.12)
+    - SwiftProtobuf
   - package_info_plus (0.4.5):
     - Flutter
   - path_provider_foundation (0.0.1):
@@ -22,20 +30,31 @@ PODS:
   - sqflite_darwin (0.0.4):
     - Flutter
     - FlutterMacOS
+  - SwiftCBOR (0.5.0)
+  - SwiftProtobuf (1.33.3)
   - url_launcher_ios (0.0.1):
     - Flutter
+  - ZIPFoundation (0.9.19)
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_blue_plus_darwin (from `.symlinks/plugins/flutter_blue_plus_darwin/darwin`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
+  - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/darwin`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
+
+SPEC REPOS:
+  trunk:
+    - iOSMcuManagerLibrary
+    - SwiftCBOR
+    - SwiftProtobuf
+    - ZIPFoundation
 
 EXTERNAL SOURCES:
   Flutter:
@@ -46,6 +65,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
   geolocator_apple:
     :path: ".symlinks/plugins/geolocator_apple/darwin"
+  mcumgr_flutter:
+    :path: ".symlinks/plugins/mcumgr_flutter/darwin"
   package_info_plus:
     :path: ".symlinks/plugins/package_info_plus/ios"
   path_provider_foundation:
@@ -64,12 +85,17 @@ SPEC CHECKSUMS:
   flutter_blue_plus_darwin: 20a08bfeaa0f7804d524858d3d8744bcc1b6dbc3
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
+  iOSMcuManagerLibrary: f72db849f6dd66b1f26cd7eea776050a22c8591c
+  mcumgr_flutter: ebe72f5f31fd7447c08d5570ff107318a5b7b8fb
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
+  SwiftCBOR: aa87349b4ccddd19f861aa544f7c27d43dee5772
+  SwiftProtobuf: e1b437c8e31a4c5577b643249a0bb62ed4f02153
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
+  ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
 PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
 
