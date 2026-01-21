@@ -29,7 +29,7 @@ class LeaderboardListItemContainer extends StatelessWidget {
         color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: borderRadius,
       ),
-      margin: isFirst ? EdgeInsets.zero : const EdgeInsets.only(top: 4),
+      margin: isFirst ? EdgeInsets.zero : const EdgeInsets.only(top: 5),
       child: child,
     );
   }

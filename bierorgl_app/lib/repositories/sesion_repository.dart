@@ -50,9 +50,10 @@ class SessionRepository {
     final db = await _db.database;
 
     final rows = await db.rawQuery('''
-      SELECT s.*, e.name AS eventName
+      SELECT s.*, e.name AS eventName,  u.username
       FROM Session s
       LEFT JOIN Event e ON s.eventID = e.eventID
+      LEFT JOIN User u ON s.userID = u.userID
       WHERE s.userID = ? 
         AND s.localDeletedAt IS NULL
       ORDER BY s.startedAt DESC
@@ -65,9 +66,10 @@ class SessionRepository {
     final db = await _db.database;
 
     final rows = await db.rawQuery('''
-      SELECT s.*, e.name AS eventName
+      SELECT s.*, e.name AS eventName, u.username
       FROM Session s
       LEFT JOIN Event e ON s.eventID = e.eventID
+      LEFT JOIN User u ON s.userID = u.userID
       WHERE s.eventID = ? 
         AND s.localDeletedAt IS NULL
       ORDER BY s.startedAt DESC

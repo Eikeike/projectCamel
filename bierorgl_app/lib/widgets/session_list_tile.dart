@@ -15,6 +15,8 @@ class SessionListTile extends StatelessWidget {
     required this.session,
     this.onTap,
     this.showAvatar = true,
+    this.showEvent = true,
+    this.showName = true,
     this.avatarUrl,
     this.avatarInitials,
     this.info = const [
@@ -28,6 +30,8 @@ class SessionListTile extends StatelessWidget {
 
   /// --- Avatar ---
   final bool showAvatar;
+  final bool showEvent;
+  final bool showName;
   final String? avatarUrl;
   final String? avatarInitials;
 
@@ -81,7 +85,7 @@ class SessionListTile extends StatelessWidget {
           children: [
             // ---------- Avatar ----------
             if (showAvatar) ...[
-              _buildAvatar(cs),
+              _buildAvatar(cs, session.username),
               const SizedBox(width: 12),
             ],
 
@@ -110,6 +114,24 @@ class SessionListTile extends StatelessWidget {
                         color: cs.onSurfaceVariant,
                       ),
                     ),
+                  if (showEvent && session.eventName != null)
+                    Text(
+                      session.eventName ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  if (showName && session.username != null)
+                    Text(
+                      session.username ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -131,7 +153,7 @@ class SessionListTile extends StatelessWidget {
     );
   }
 
-  Widget _buildAvatar(ColorScheme cs) {
+  Widget _buildAvatar(ColorScheme cs, username) {
     if (!showAvatar) return const SizedBox.shrink();
 
     if (avatarUrl != null && avatarUrl!.isNotEmpty) {
@@ -145,11 +167,7 @@ class SessionListTile extends StatelessWidget {
       radius: 20,
       backgroundColor: cs.primaryContainer,
       child: Text(
-        (avatarInitials ??
-                session.userRealName?.characters.first ??
-                session.username?.characters.first ??
-                '?')
-            .toUpperCase(),
+        (username[0] ?? '').toUpperCase(),
       ),
     );
   }

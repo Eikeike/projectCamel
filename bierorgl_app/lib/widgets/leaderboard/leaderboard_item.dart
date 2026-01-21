@@ -51,11 +51,11 @@ class LeaderboardItem<T> extends StatelessWidget {
           const SizedBox(width: 8),
           CircleAvatar(
             radius: 18,
-            backgroundColor: colorScheme.secondaryContainer,
+            backgroundColor: colorScheme.primaryContainer,
             child: Text(
               initial,
               style: TextStyle(
-                color: colorScheme.onSecondaryContainer,
+                color: colorScheme.onPrimaryContainer,
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
@@ -65,8 +65,8 @@ class LeaderboardItem<T> extends StatelessWidget {
       ),
       title: Text(
         name,
-        style:
-            theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+        style: theme.textTheme.titleSmall
+            ?.copyWith(color: theme.colorScheme.onSurface),
       ),
       subtitle: Text(
         getSubtitle(entry),
@@ -77,7 +77,7 @@ class LeaderboardItem<T> extends StatelessWidget {
         getTrailing(entry),
         style: theme.textTheme.titleMedium?.copyWith(
           color: colorScheme.primary,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );

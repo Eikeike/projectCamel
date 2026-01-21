@@ -343,7 +343,7 @@ class _LocationsCard extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: SizedBox(
-            height: 300, // Taller, like in the Edit Screen
+            height: 250, // Taller, like in the Edit Screen
             child: FlutterMap(
               options: MapOptions(
                 initialCameraFit: CameraFit.coordinates(
@@ -384,9 +384,6 @@ class _LocationsCard extends StatelessWidget {
                         decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
                             shape: BoxShape.circle,
-                            border: Border.all(
-                                color: theme.colorScheme.onPrimaryContainer,
-                                width: 2),
                             boxShadow: [
                               BoxShadow(
                                   color: Colors.black.withOpacity(0.2),
@@ -908,6 +905,8 @@ class _HistorySection extends StatelessWidget {
             sessions: sessions,
             embedded: true,
             showAvatar: false,
+            showName: false,
+            showEvent: true,
             onSessionTap: (session) {
               Navigator.push(
                 context,

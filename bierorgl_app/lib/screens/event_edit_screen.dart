@@ -534,6 +534,7 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
                 key: const PageStorageKey('sessionsByEventList'),
                 sessions: sessions,
                 embedded: true,
+                showEvent: false,
                 onSessionTap: (session) {
                   Navigator.push(
                     context,

@@ -9,6 +9,8 @@ class SessionList extends StatelessWidget {
     required this.sessions,
     required this.onSessionTap,
     this.showAvatar = true,
+    this.showEvent = true,
+    this.showName = true,
     this.embedded = false,
   });
 
@@ -20,6 +22,8 @@ class SessionList extends StatelessWidget {
   final bool embedded;
 
   final bool showAvatar;
+  final bool showEvent;
+  final bool showName;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +43,7 @@ class SessionList extends StatelessWidget {
       physics: embedded
           ? const NeverScrollableScrollPhysics()
           : const BouncingScrollPhysics(),
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      separatorBuilder: (_, __) => const SizedBox(height: 5),
       itemBuilder: (context, index) {
         final session = sessions[index];
 
@@ -58,6 +62,8 @@ class SessionList extends StatelessWidget {
           ),
           child: SessionListTile(
             showAvatar: showAvatar,
+            showEvent: showEvent,
+            showName: showName,
             session: session,
             onTap: () => onSessionTap(session),
           ),

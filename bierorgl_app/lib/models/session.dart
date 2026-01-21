@@ -108,6 +108,7 @@ class Session {
         'startedAt',
       ),
       userID: row['userID'] as String,
+      username: row['username'] as String,
       eventID: row['eventID'] as String?,
       durationMS: (row['durationMS'] as num?)?.toInt() ?? 0,
       valuesJSON: row['valuesJSON']?.toString(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/auth/auth_providers.dart';
+import 'package:project_camel/providers.dart';
 import '../core/constants.dart';
 import '../core/color_constants.dart';
 import '../theme/theme_provider.dart';
@@ -201,7 +202,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     title: const Text('Jetzt synchronisieren'),
                     subtitle: const Text('Daten manuell mit Server abgleichen'),
                     onTap: () {
-                      debugPrint("Sync Button gedrückt (Placeholder)");
+                      ref.read(autoSyncControllerProvider).triggerSyncNow();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text(
+                              'Synchronisierung gestartet',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest),
+                      );
                     },
                   ),
                   const Divider(indent: 16, endIndent: 16, height: 1),
