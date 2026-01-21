@@ -209,13 +209,13 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
   /// Build params for aggregation providers (no volumeML or sort, no limit/offset)
   LeaderboardParams _buildParamsForMetric(LeaderboardFilters filters) {
     final eventID = filters.eventID == 'Alle' ? null : filters.eventID;
-    // Don't spread the Set; use it directly (immutable in filters)
+    final volumeML = _parseVolume(filters.volume);
     final userIDs = filters.userIDs.isEmpty ? null : filters.userIDs;
 
     return (
       sort: LeaderboardSort.fastest, // unused for aggregation, but required
       userIDs: userIDs,
-      volumeML: null,
+      volumeML: volumeML,
       eventID: eventID,
       limit: null,
       offset: null,
