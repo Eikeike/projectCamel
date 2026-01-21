@@ -132,10 +132,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen>
           labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
           tabs: const [
-            Tab(text: "Runs"),
+            Tab(text: "Läufe"),
             Tab(text: "Ø Zeit"),
-            Tab(text: "Anzahl"),
-            Tab(text: "Volumen"),
+            Tab(text: "∑ Anzahl"),
+            Tab(text: "∑ Vol."),
           ],
         ),
       ),

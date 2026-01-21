@@ -84,10 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.person),
               label: 'Profil',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bug_report),
-              label: 'DEBUG',
-            ),
+            // BottomNavigationBarItem(
+            //   icon: Icon(Icons.bug_report),
+            //   label: 'DEBUG',
+            // ),
           ],
         ),
       ),
