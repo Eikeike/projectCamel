@@ -45,10 +45,13 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
 
     _nameController = TextEditingController(text: e?.name ?? '');
     _descController = TextEditingController(text: e?.description ?? '');
+
+    // FIX 1: .toLocal() hinzufügen für korrekte Anzeige
     _dateFromController = TextEditingController(
-        text: e?.dateFrom != null ? _dateFmt.format(e!.dateFrom!) : '');
+        text:
+            e?.dateFrom != null ? _dateFmt.format(e!.dateFrom!.toLocal()) : '');
     _dateToController = TextEditingController(
-        text: e?.dateTo != null ? _dateFmt.format(e!.dateTo!) : '');
+        text: e?.dateTo != null ? _dateFmt.format(e!.dateTo!.toLocal()) : '');
 
     if (e?.latitude != null && e?.longitude != null) {
       _selectedLocation = LatLng(e!.latitude!, e.longitude!);
@@ -138,16 +141,19 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
       final e = widget.event!;
       _nameController.text = e.name;
       _descController.text = e.description ?? '';
+
+      // FIX 2: Auch hier .toLocal() beim Abbrechen
       _dateFromController.text =
-          e.dateFrom != null ? _dateFmt.format(e.dateFrom!) : '';
+          e.dateFrom != null ? _dateFmt.format(e.dateFrom!.toLocal()) : '';
       _dateToController.text =
-          e.dateTo != null ? _dateFmt.format(e.dateTo!) : '';
+          e.dateTo != null ? _dateFmt.format(e.dateTo!.toLocal()) : '';
 
       if (e.latitude != null && e.longitude != null) {
         _selectedLocation = LatLng(e.latitude!, e.longitude!);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_selectedLocation != null)
+          if (_selectedLocation != null) {
             _mapController.move(_selectedLocation!, 15);
+          }
         });
       } else {
         _selectedLocation = null;
@@ -157,10 +163,23 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
     });
   }
 
+  // FIX 3: Robustes Parsing mit 12:00 Uhr UTC Trick
   DateTime? _parseDate(String text) {
     if (text.isEmpty) return null;
     try {
-      return _dateFmt.parse(text);
+      // Parse String zu lokalem Datum (00:00 Uhr)
+      final localDate = _dateFmt.parse(text);
+
+      // Erstelle UTC Datum um 12:00 Uhr mittags
+      // Dies verhindert Datumsverschiebung durch Zeitzonen
+      return DateTime.utc(
+        localDate.year,
+        localDate.month,
+        localDate.day,
+        12,
+        0,
+        0,
+      );
     } catch (_) {
       return null;
     }
@@ -353,21 +372,13 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
     );
   }
 
-  // --- MAP WIDGET MIT DARK MODE FILTER ---
   Widget _buildLocationMap(ThemeData theme) {
     final center = _selectedLocation ?? const LatLng(51.1657, 10.4515);
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    // Standard OSM URL
-    const mapUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-    // Matrix zum Invertieren der Farben (Dark Mode Filter)
-    const invertMatrix = <double>[
-      -0.2126, -0.7152, -0.0722, 0, 255, // Red channel
-      -0.2126, -0.7152, -0.0722, 0, 255, // Green channel
-      -0.2126, -0.7152, -0.0722, 0, 255, // Blue channel
-      0, 0, 0, 1, 0, // Alpha channel
-    ];
+    final mapUrl = isDarkMode
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
 
     return Column(
       children: [
@@ -396,21 +407,11 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
                         : null,
                   ),
                   children: [
-                    // --- TILE LAYER MIT COLORFILTER ---
-                    isDarkMode
-                        ? ColorFiltered(
-                            colorFilter: const ColorFilter.matrix(invertMatrix),
-                            child: TileLayer(
-                              urlTemplate: mapUrl,
-                              userAgentPackageName: 'com.example.project_camel',
-                            ),
-                          )
-                        : TileLayer(
-                            urlTemplate: mapUrl,
-                            userAgentPackageName: 'com.example.project_camel',
-                          ),
-
-                    // Marker Layer (WICHTIG: Außerhalb des ColorFiltered, damit Marker rot bleiben)
+                    TileLayer(
+                      urlTemplate: mapUrl,
+                      userAgentPackageName: 'com.example.project_camel',
+                      subdomains: const ['a', 'b', 'c', 'd'],
+                    ),
                     MarkerLayer(
                       markers: [
                         if (_selectedLocation != null)
@@ -426,11 +427,11 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
                           ),
                       ],
                     ),
-
                     RichAttributionWidget(
                       attributions: [
                         TextSourceAttribution('OpenStreetMap contributors',
                             onTap: () {}),
+                        TextSourceAttribution('© CARTO', onTap: () {}),
                       ],
                     ),
                   ],

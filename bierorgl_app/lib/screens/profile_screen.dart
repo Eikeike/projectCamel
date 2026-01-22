@@ -269,7 +269,7 @@ class _LocationsCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
 
-    // 1. Prepare data (filter invalid coordinates)
+    // 1. Prepare data
     final validPoints = sessions
         .where((s) =>
             s.latitude != 0 &&
@@ -281,7 +281,7 @@ class _LocationsCard extends StatelessWidget {
 
     if (validPoints.isEmpty) return const SizedBox.shrink();
 
-    // 2. Create Marker List
+    // 2. Create Markers
     final List<Marker> markers = validPoints.map((point) {
       return Marker(
         point: point,
@@ -295,21 +295,16 @@ class _LocationsCard extends StatelessWidget {
       );
     }).toList();
 
-    // Standard OSM URL
-    const mapUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-    // Matrix to invert colors (Dark Mode Filter)
-    const invertMatrix = <double>[
-      -0.2126, -0.7152, -0.0722, 0, 255, // Red channel
-      -0.2126, -0.7152, -0.0722, 0, 255, // Green channel
-      -0.2126, -0.7152, -0.0722, 0, 255, // Blue channel
-      0, 0, 0, 1, 0, // Alpha channel
-    ];
+    // --- ÄNDERUNG: Wähle die URL basierend auf dem Theme ---
+    // CartoDB Positron (Hell) vs. CartoDB Dark Matter (Dunkel)
+    final mapUrl = isDarkMode
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title directly above the map (no longer inside a container)
+        // Title
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
           child: Row(
@@ -339,11 +334,11 @@ class _LocationsCard extends StatelessWidget {
           ),
         ),
 
-        // The Map itself
+        // The Map
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: SizedBox(
-            height: 250, // Taller, like in the Edit Screen
+            height: 250,
             child: FlutterMap(
               options: MapOptions(
                 initialCameraFit: CameraFit.coordinates(
@@ -352,26 +347,19 @@ class _LocationsCard extends StatelessWidget {
                   maxZoom: 15.0,
                 ),
                 interactionOptions: const InteractionOptions(
-                  // Disable scrolling so the user can scroll the profile page
                   flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
                 ),
               ),
               children: [
-                // --- TILE LAYER WITH COLOR FILTER ---
-                isDarkMode
-                    ? ColorFiltered(
-                        colorFilter: const ColorFilter.matrix(invertMatrix),
-                        child: TileLayer(
-                          urlTemplate: mapUrl,
-                          userAgentPackageName: 'com.example.project_camel',
-                        ),
-                      )
-                    : TileLayer(
-                        urlTemplate: mapUrl,
-                        userAgentPackageName: 'com.example.project_camel',
-                      ),
+                // --- ÄNDERUNG: Einfachere TileLayer Struktur ---
+                TileLayer(
+                  urlTemplate: mapUrl,
+                  userAgentPackageName: 'com.example.project_camel',
+                  // WICHTIG für CartoDB:
+                  subdomains: const ['a', 'b', 'c', 'd'],
+                ),
 
-                // CLUSTERING (Still useful for many points)
+                // Clustering
                 MarkerClusterLayerWidget(
                   options: MarkerClusterLayerOptions(
                     maxClusterRadius: 45,
@@ -403,13 +391,17 @@ class _LocationsCard extends StatelessWidget {
                   ),
                 ),
 
-                // Attribution with color logic
+                // --- ÄNDERUNG: Korrekte Attribution für CartoDB ---
                 RichAttributionWidget(
                   animationConfig: const ScaleRAWA(),
                   attributions: [
                     TextSourceAttribution(
                       'OpenStreetMap contributors',
-                      onTap: () {},
+                      onTap: () {}, // Hier ggf. Link öffnen logic einfügen
+                    ),
+                    TextSourceAttribution(
+                      '© CARTO',
+                      onTap: () {}, // Hier ggf. Link auf carto.com
                     ),
                   ],
                 ),
@@ -905,8 +897,6 @@ class _HistorySection extends StatelessWidget {
             sessions: sessions,
             embedded: true,
             showAvatar: false,
-            showName: false,
-            showEvent: true,
             onSessionTap: (session) {
               Navigator.push(
                 context,
