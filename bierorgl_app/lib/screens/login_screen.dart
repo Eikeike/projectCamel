@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:project_camel/screens/password_reset_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:project_camel/auth/auth_providers.dart';
@@ -124,46 +125,63 @@ class LoginScreen extends ConsumerWidget {
               const Spacer(),
 
               /// Footer: bleibt weg bis Tastatur WIRKLICH weg ist
-              AnimatedContainer(
-                duration: anim,
-                height: keyboardOpen ? 0 : 72,
-                child: Opacity(
-                  opacity: keyboardOpen ? 0 : 1,
-                  child: IgnorePointer(
-                    ignoring: keyboardOpen,
-                    child: Column(
-                      children: [
-                        TextButton(
-                          onPressed: () => _launchURL(context),
-                          child: RichText(
-                            text: TextSpan(
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
-                              children: [
-                                const TextSpan(text: 'NOCH KEIN KONTO? '),
-                                TextSpan(
-                                  text: 'KONTO ERSTELLEN',
-                                  style: TextStyle(
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+              /// Footer: bleibt weg bis Tastatur WIRKLICH weg ist
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: keyboardOpen
+                    ? const SizedBox.shrink()
+                    : Column(
+                        key: const ValueKey('footer'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const PasswordResetScreen(),
                                 ),
-                              ],
+                              );
+                            },
+                            child: Text(
+                              'PASSWORT VERGESSEN?',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ),
+                          TextButton(
+                            onPressed: () => _launchURL(context),
+                            child: RichText(
+                              textAlign: TextAlign.center,
+                              text: TextSpan(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                children: [
+                                  const TextSpan(text: 'NOCH KEIN KONTO? '),
+                                  TextSpan(
+                                    text: 'KONTO ERSTELLEN',
+                                    style: TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
               ),
             ],
           ),

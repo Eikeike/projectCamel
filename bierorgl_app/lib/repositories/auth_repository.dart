@@ -219,4 +219,21 @@ class AuthRepository {
       return null;
     }
   }
+
+  Future<void> requestPasswordReset({required String email}) async {
+    final response = await _authDio.post(
+      AppConstants.passwordResetPath,
+      data: {'email': email},
+    );
+
+    // Most APIs return 200/204 for “sent” (sometimes 201). Accept a range.
+    final ok = response.statusCode != null &&
+        (response.statusCode == 200 ||
+            response.statusCode == 201 ||
+            response.statusCode == 204);
+
+    if (!ok) {
+      throw Exception('Passwort-Reset fehlgeschlagen');
+    }
+  }
 }

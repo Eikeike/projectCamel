@@ -105,6 +105,20 @@ class AuthController extends Notifier<AuthState> {
       isLoading: false,
     );
   }
+
+  Future<void> requestPasswordReset(String email) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      await _authRepository.requestPasswordReset(email: email);
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
+    } finally {
+      if (ref.mounted) {
+        state = state.copyWith(isLoading: false);
+      }
+    }
+  }
 }
 
 final authControllerProvider =
