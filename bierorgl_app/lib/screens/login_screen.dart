@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/screens/password_reset_screen.dart';
+import 'package:project_camel/screens/register_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:project_camel/auth/auth_providers.dart';
@@ -153,7 +154,13 @@ class LoginScreen extends ConsumerWidget {
                             ),
                           ),
                           TextButton(
-                            onPressed: () => _launchURL(context),
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterScreen(),
+                                ),
+                              );
+                            },
                             child: RichText(
                               textAlign: TextAlign.center,
                               text: TextSpan(

@@ -164,6 +164,46 @@ class AuthRepository {
     }
   }
 
+  Future<void> register({
+    required String email,
+    required String username,
+    String? firstName,
+    String? lastName,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    final data = <String, dynamic>{
+      'email': email,
+      'username': username,
+      'password1': password,
+      'password2': confirmPassword,
+    };
+
+    if (firstName != null && firstName.trim().isNotEmpty) {
+      data['first_name'] = firstName.trim();
+    }
+    if (lastName != null && lastName.trim().isNotEmpty) {
+      data['last_name'] = lastName.trim();
+    }
+
+    final response = await _authDio.post(AppConstants.registerPath, data: data);
+
+    final ok = response.statusCode != null &&
+        (response.statusCode == 200 || response.statusCode == 201);
+
+    if (!ok) throw Exception('Registrierung fehlgeschlagen');
+
+    final accessToken = response.data['access'] as String?;
+    final refreshToken = response.data['refresh'] as String?;
+
+    if (accessToken == null || refreshToken == null) {
+      throw Exception('Register-Antwort unvollständig (Tokens fehlen)');
+    }
+
+    await _storage.write('access_token', accessToken);
+    await _storage.write('refresh_token', refreshToken);
+  }
+
   Future<String?> _ensureValidAccessTokenOfflineSafe() async {
     final token = await _storage.read('access_token');
     if (token == null) return null;
