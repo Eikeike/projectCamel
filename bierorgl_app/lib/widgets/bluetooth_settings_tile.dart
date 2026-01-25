@@ -1,21 +1,60 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Passe diese Imports an deinen tatsächlichen Pfad an
+// Stelle sicher, dass diese Pfade zu deinem Projekt passen:
 import '../services/trichter_scanner_service.dart';
 import '../services/trichter_connection_service.dart';
 
 class BluetoothSettingsTile extends ConsumerWidget {
   const BluetoothSettingsTile({super.key});
 
-  // ---------------------------------------------------------------------------
-  // Haupt-Build Methode (Die Kachel in den Settings)
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 1. HAUPT BUILD METHODE (Die Kachel in den Settings)
+  // ===========================================================================
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scanState = ref.watch(trichterScanProvider);
     final connectionState = ref.watch(trichterConnectionProvider);
+    final status = connectionState.deviceStatus;
 
+    // -------------------------------------------------------------------------
+    // SPEZIAL-FALL: Kalibrierung läuft -> Zeige großen Abbrechen-Button
+    // Ersetzt die normale Kachel, damit der User sofort reagieren kann.
+    // -------------------------------------------------------------------------
+    if (status == TrichterDeviceStatus.calibrating) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: SizedBox(
+          height: 80, // Etwas höher für bessere Trefferfläche
+          width: double.infinity,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              // "Achtung"-Farbe (meist rötlich pastell), aber nicht aggressiv
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            onPressed: () {
+              // Sende "Ready", um den internen Kalibrierungs-Loop am Gerät zu beenden
+              ref
+                  .read(trichterConnectionProvider.notifier)
+                  .requestState(TrichterDeviceStatus.ready);
+            },
+            icon: const Icon(Icons.close, size: 28),
+            label: const Text(
+              "Kalibrierung abbrechen",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // STANDARD: Normale Info-Kachel
+    // -------------------------------------------------------------------------
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: InkWell(
@@ -88,9 +127,9 @@ class BluetoothSettingsTile extends ConsumerWidget {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Bottom Sheet Logik
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 2. BOTTOM SHEET LOGIK
+  // ===========================================================================
   void _showBluetoothBottomSheet(
     BuildContext context,
     WidgetRef ref,
@@ -277,9 +316,9 @@ class BluetoothSettingsTile extends ConsumerWidget {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Widget: Connected Card (Control Center)
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 3. CONNECTED DEVICE CARD (CONTROL CENTER)
+  // ===========================================================================
   Widget _buildConnectedDeviceCard(
       BuildContext context, WidgetRef ref, TrichterConnectionState state) {
     final deviceName =
@@ -291,7 +330,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow, // Neutraler Hintergrund wie Liste
+        color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -311,18 +350,17 @@ class BluetoothSettingsTile extends ConsumerWidget {
             ],
           ),
 
-          const SizedBox(height: 20), // Abstand
+          const SizedBox(height: 20),
 
           // 2. Action Zeile: Buttons + Trennen
           Row(
             children: [
               // --- Steuerungs-Buttons (Linker Bereich) ---
-              // Diese Methoden liefern Expanded Widgets zurück
               ..._buildControlButtons(context, status, notifier),
 
               const SizedBox(width: 12),
 
-              // --- Trenner (Vertikale Linie) ---
+              // --- Trenner ---
               Container(
                 height: 24,
                 width: 1,
@@ -330,11 +368,11 @@ class BluetoothSettingsTile extends ConsumerWidget {
               ),
               const SizedBox(width: 12),
 
-              // --- Trennen Button (Rechter Bereich) ---
+              // --- Trennen Button (Rechts) ---
               IconButton(
                 onPressed: () {
                   notifier.disconnect();
-                  Navigator.pop(context); // Sheet schließen
+                  Navigator.pop(context);
                 },
                 style: IconButton.styleFrom(
                   foregroundColor: scheme.error,
@@ -350,12 +388,12 @@ class BluetoothSettingsTile extends ConsumerWidget {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Logik für die Steuerungs-Buttons (State Machine)
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 4. LOGIK FÜR STEUERUNGS-BUTTONS (STATE MACHINE)
+  // ===========================================================================
   List<Widget> _buildControlButtons(BuildContext context,
       TrichterDeviceStatus status, TrichterConnectionService notifier) {
-    // Helper: Kompakte Buttons für das BottomSheet
+    // Helper für Buttons
     Widget btn(String text, IconData icon, VoidCallback onTap,
         {bool isPrimary = false}) {
       return Expanded(
@@ -395,7 +433,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
     const gap = SizedBox(width: 8);
 
     switch (status) {
-      // IDLE -> Calibrate | Ready
+      // IDLE -> Kalibrieren | Aufwecken
       case TrichterDeviceStatus.idle:
         return [
           btn("Kalibrieren", Icons.tune,
@@ -406,7 +444,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
               isPrimary: true),
         ];
 
-      // READY -> Idle | Calibrate
+      // READY -> Standby | Kalibrieren
       case TrichterDeviceStatus.ready:
         return [
           outlinedBtn("Standby", Icons.bedtime,
@@ -416,15 +454,29 @@ class BluetoothSettingsTile extends ConsumerWidget {
               () => notifier.requestState(TrichterDeviceStatus.calibrating)),
         ];
 
-      // CALIBRATING -> Idle | Ready (Fertig)
+      // CALIBRATING -> Abbrechen
       case TrichterDeviceStatus.calibrating:
         return [
-          outlinedBtn("Standby", Icons.bedtime,
-              () => notifier.requestState(TrichterDeviceStatus.idle)),
-          gap,
-          btn("Fertig", Icons.check,
+          // Sende "Ready", um internen Wait-Loop am Gerät zu beenden
+          btn("Abbrechen", Icons.close,
+              () => notifier.requestState(TrichterDeviceStatus.ready),
+              isPrimary: false),
+        ];
+
+      // RUNNING -> Stoppen
+      case TrichterDeviceStatus.running:
+        return [
+          btn("Stoppen", Icons.stop,
               () => notifier.requestState(TrichterDeviceStatus.ready),
               isPrimary: true),
+        ];
+
+      // SENDING -> Abbrechen
+      case TrichterDeviceStatus.sending:
+        return [
+          btn("Abbrechen", Icons.cancel_presentation,
+              () => notifier.requestState(TrichterDeviceStatus.ready),
+              isPrimary: false),
         ];
 
       // ERROR -> Reset
@@ -435,14 +487,18 @@ class BluetoothSettingsTile extends ConsumerWidget {
               isPrimary: true)
         ];
 
+      // DEFAULT -> Fallback
       default:
-        return [const Spacer()];
+        return [
+          btn("Status Reset", Icons.help_outline,
+              () => notifier.requestState(TrichterDeviceStatus.ready))
+        ];
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Hilfsfunktionen & Snackbars
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 5. HELPER
+  // ===========================================================================
   String _getBluetoothConnectionText(
     TrichterConnectionState connState,
     TrichterScanState scanState,
