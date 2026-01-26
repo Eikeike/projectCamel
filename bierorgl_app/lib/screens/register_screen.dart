@@ -25,50 +25,57 @@ class RegisterScreen extends ConsumerWidget {
     });
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          children: [
-            Text(
-              'BIERORGL',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: Theme.of(context).colorScheme.primary,
-                    letterSpacing: -0.5,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Konto erstellen',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant
-                        .withOpacity(0.7),
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-            const SizedBox(height: 32),
-            const RegisterForm(),
-            const SizedBox(height: 32),
-            Center(
-              child: TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'ZURÜCK ZUM LOGIN',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
+        // Center sorgt für die vertikale Zentrierung auf großen Bildschirmen
+        child: Center(
+          child: SingleChildScrollView(
+            // BouncingScrollPhysics fühlt sich auf iOS und Android flüssiger an
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'BIERORGL',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: Theme.of(context).colorScheme.primary,
+                        letterSpacing: -0.5,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Konto erstellen',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurfaceVariant
+                            .withOpacity(0.7),
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+                const SizedBox(height: 40),
+                const RegisterForm(),
+                const SizedBox(height: 24),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(
+                    'ZURÜCK ZUM LOGIN',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
