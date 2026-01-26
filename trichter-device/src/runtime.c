@@ -28,11 +28,11 @@ static volatile uint16_t g_timestamp_idx_to_write = 0;
 
 #define ADV_BLINK_TIME_MS				1500
 //#define PRINT_TIMESTAMPS_IN_CONSOLE
+#define READY_MODE_TIMEOUT_SEC			900 //15min timeout
 
 static uint64_t last_timestamp_blink = 0;
 static uint8_t is_running = false;
 static uint8_t party_mode = false;
-static bool g_advertise_in_ready = 0;
 static bool g_valid_calibration = false;
 #define SENSOR_QUALIFICATION_BURST_WINDOW_MS	K_MSEC(150)
 #define MIN_TIMESTAMPS_IN_BURST_WINDOW			3
@@ -41,14 +41,13 @@ static bool start_sent = false;
 
 static K_TIMER_DEFINE(fsm_timer, NULL, NULL);
 
-void adv_timer_exp(struct k_timer *timer);
-static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
-
 static void sensor_qualification_handler(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(sensor_qualification_work, sensor_qualification_handler);
 
 
 void timer_reset();
+
+static CalibrationAttempt g_calib_attempt_notifier;
 
 
 void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, unsigned int pins)
@@ -66,13 +65,6 @@ void sensor_triggered_isr(const struct device *dev, struct gpio_callback *cb, un
 		printk("Sensor pressed at %d\n", g_timestamps[g_timestamp_idx_to_write]);
 		g_timestamp_idx_to_write++;
 	}
-	
-	
-/* 	if (g_stateMachine.current->id == STATE_RUNNING || g_stateMachine.requestStateDeferred == STATE_RUNNING ||
-		g_stateMachine.current->id == STATE_CALIBRATING|| g_stateMachine.requestStateDeferred == STATE_CALIBRATING)
-	{
-		
-	} */
 }
 
 
@@ -119,8 +111,11 @@ void input_request_state_ready()
 
 void input_request_pairing_mode()
 {
-	g_advertise_in_ready = true;
 	ble_delete_active_connection();
+	if (!ble_is_adv())
+	{
+		ble_start_adv(BLE_ADV_FAST);
+	}
 }
 
 
@@ -136,12 +131,6 @@ void init_seven_seg()
     {
         printk("Set up TM1637 failed\n");
     }
-}
-
-void adv_timer_exp(struct k_timer *timer)
-{
-	ble_stop_adv();
-	g_advertise_in_ready = false;
 }
 
 
@@ -182,7 +171,7 @@ void timer_reset()
 
 void on_trichter_startup()
 {
-	g_advertise_in_ready = true;
+	ble_start_adv(BLE_ADV_FAST);
     fsm_transition_deferred(STATE_READY);
 }
 
@@ -234,8 +223,16 @@ uint8_t ReadyEntry(void)
 	} else {
 		tm1637_display_ready(2);
 	}
-	k_timer_start(&fsm_timer, K_SECONDS(120), K_NO_WAIT);
+	k_timer_start(&fsm_timer, K_SECONDS(READY_MODE_TIMEOUT_SEC), K_NO_WAIT);
 	reset_sensor_run_state();
+
+	#ifndef CONFIG_BUTTONLESS
+	if (!ble_is_adv() && !is_ble_connected())
+	{
+		ble_start_adv(BLE_ADV_FAST); //fast adv
+	}
+	#endif
+
 	g_stateMachine.period_ms = FSM_PERIOD_SLOW_MS;
 	return ERR_NONE;
 };
@@ -243,14 +240,13 @@ uint8_t ReadyEntry(void)
 
 uint8_t ReadyRun(void)
 {
-	if (g_advertise_in_ready || ble_is_adv())
+	#ifdef CONFIG_BUTTONLESS
+	if (!is_ble_connected())
 	{
-		if (!is_ble_connected())
+		if (!ble_is_adv())
 		{
-			if (!ble_is_adv())
-			{
-				ble_start_adv();
-			}
+			ble_start_adv(BLE_ADV_FAST);
+		} else {
 			//blinking while advertising
 			uint64_t now = k_uptime_get();
 			if ((now - last_timestamp_blink) > ADV_BLINK_TIME_MS)
@@ -260,22 +256,11 @@ uint8_t ReadyRun(void)
 			}
 		}
 	}
-	
 	if (is_ble_connected()) {
 		gpio_pin_set_dt(&led, 1); // solid LED when connected
 	}
+	#endif
 
-	//longpress detection
-	/*
-	if (gpio_pin_get_dt(&button_ready) == 1)
-	{
-		if ((k_uptime_get() - g_ready_button.last_timestamp_ready_button) > TIMER_LONGPRESS_TIME_MS)
-		{
-			g_ready_button.last_timestamp_ready_button = k_uptime_get(); 
-			fsm_transition(STATE_CALIBRATING);
-		}
-	}
-	*/
 	if (k_timer_status_get(&fsm_timer) > 0)
 	{
 		fsm_transition(STATE_IDLE);
@@ -287,8 +272,9 @@ uint8_t ReadyRun(void)
 uint8_t ReadyExit(void)
 {
 	k_timer_stop(&fsm_timer); //TODO assign fsm_timer to state machine and stop it on each transition request
+	#ifndef CONFIG_BUTTONLESS
 	ble_stop_adv();
-	g_advertise_in_ready = false;
+	#endif
 	return ERR_NONE;
 };
 
@@ -296,7 +282,6 @@ uint8_t ReadyExit(void)
 uint8_t RunningEntry(void)
 {
 	ble_stop_adv();
-	k_timer_stop(&adv_timer);
 	g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
 	return ERR_NONE;
 };
@@ -351,6 +336,7 @@ uint8_t CalibEntry(void)
 {
 	tm1637_display_cal(5);
 	timer_reset();
+	g_calib_attempt_notifier(false);
 	g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
 	g_valid_calibration = false;
 	return ERR_NONE;
@@ -394,6 +380,8 @@ uint8_t CalibExit(void)
 {
 	is_running = false;
 	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_STOP);
+	bool valid_calib_attempt = g_valid_calibration && global_calibration_value <= 400 && global_calibration_value >= 100;
+	g_calib_attempt_notifier(valid_calib_attempt);
 	if (g_valid_calibration)
 	{
 		save_counter_ram_to_rom();
@@ -499,3 +487,9 @@ uint8_t ErrorEntry(void){
 };
 uint8_t ErrorRun(void){return ERR_NONE;};
 uint8_t ErrorExit(void){return ERR_NO_IMPL;};
+
+
+void calib_attempt_register_notifier(CalibrationAttempt notifier)
+{
+	g_calib_attempt_notifier = notifier;
+};

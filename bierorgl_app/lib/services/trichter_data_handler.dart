@@ -2,8 +2,12 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'trichter_connection_service.dart';
-import '../core/constants.dart';
+import 'trichter_connection_service.dart'; // Dein Pfad
+import '../core/constants.dart'; // Dein Pfad
+
+// ==========================================
+// STATE
+// ==========================================
 
 class TrichterDataState {
   final List<int> rawTicks;
@@ -50,23 +54,40 @@ class TrichterDataState {
     );
   }
 
-  /// Berechnet den aktuellen Fortschritt der Übertragung (0.0 bis 1.0)
   double get progress {
     if (expectedTickCount <= 0) return 0.0;
     return (rawTicks.length / expectedTickCount).clamp(0.0, 1.0);
   }
 }
 
+// ==========================================
+// HANDLER (LOGIK)
+// ==========================================
+
 class TrichterDataHandler extends Notifier<TrichterDataState> {
   StreamSubscription? _dataSubscription;
+  
+  // Um zu verhindern, dass wir streams doppelt aufsetzen, wenn doch mal ein Rebuild passiert
+  String? _currentlyConnectedDeviceId; 
 
   @override
   TrichterDataState build() {
-    final connectionState = ref.watch(trichterConnectionProvider);
+    // FIX 1: SELECT VERWENDEN
+    // Wir hören nur auf Änderungen der Verbindung oder des Geräts selbst.
+    // Status-Änderungen (z.B. "Running", "Sending") lösen jetzt KEINEN Rebuild mehr aus.
+    final connectionState = ref.watch(
+      trichterConnectionProvider.select((s) => (s.status, s.connectedDevice)),
+    );
 
-    if (connectionState.status == TrichterConnectionStatus.connected &&
-        connectionState.connectedDevice != null) {
-      _setupDataStreams(connectionState.connectedDevice!);
+    final status = connectionState.$1;
+    final device = connectionState.$2;
+
+    if (status == TrichterConnectionStatus.connected && device != null) {
+      // Sicherheitscheck: Nur initialisieren, wenn es ein neues Gerät ist
+      if (_currentlyConnectedDeviceId != device.remoteId.toString()) {
+         _setupDataStreams(device);
+         _currentlyConnectedDeviceId = device.remoteId.toString();
+      }
     } else {
       _cleanup();
     }
@@ -78,6 +99,7 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
   void _cleanup() {
     _dataSubscription?.cancel();
     _dataSubscription = null;
+    _currentlyConnectedDeviceId = null;
   }
 
   void resetSession() {
@@ -93,29 +115,53 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
 
   Future<void> _setupDataStreams(BluetoothDevice device) async {
     try {
+      // Hinweis: FBP cacht services, daher ist discoverServices hier meist schnell/sicher
       final services = await device.discoverServices();
+      
       for (var service in services) {
         for (var char in service.characteristics) {
           final uuid = char.uuid.toString().toLowerCase();
 
-          // 1. Zeit-Kalibrierung lesen
+          // 1. Zeit-Kalibrierung lesen (Read Property)
           if (uuid == BleConstants.calibUuid) {
-            final val = await char.read().timeout(const Duration(seconds: 5));
-            if (val.isNotEmpty) {
-              state = state.copyWith(timeCalibrationFactor: val[0].toDouble());
+            try {
+              final val = await char.read().timeout(const Duration(seconds: 5));
+              if (val.isNotEmpty) {
+                state = state.copyWith(timeCalibrationFactor: val[0].toDouble());
+              }
+            } catch (e) {
+              print("Fehler beim Lesen der Kalibrierung: $e");
             }
           }
 
-          // 2. Daten-Indication abonnieren
+          // 2. Daten-Indication abonnieren (Notify/Indicate Property)
           if (uuid == BleConstants.sessionUuid) {
+            
+            // FIX 2: REIHENFOLGE TAUSCHEN & STREAM WECHSELN
+            
+            // A) Erst aufräumen
+            await _dataSubscription?.cancel();
+
+            // B) ZUERST ZUHÖREN (onValueReceived statt lastValueStream!)
+            // onValueReceived feuert nur bei wirklich neuen Daten-Events.
+            _dataSubscription = char.onValueReceived.listen((data) {
+                _handleIncomingRawData(data);
+            });
+            
+            // Sicherheitsnetz: Stream killen, wenn Device disconnected
+            device.cancelWhenDisconnected(_dataSubscription!);
+
+            // C) DANACH NOTIFICATIONS AKTIVIEREN
+            // Jetzt sind wir bereit, Daten zu empfangen.
             await char.setNotifyValue(true);
-            _dataSubscription?.cancel();
-            _dataSubscription =
-                char.lastValueStream.listen(_handleIncomingRawData);
+            
+            print("Data Stream erfolgreich registriert für ${char.uuid}");
           }
         }
       }
     } catch (e) {
+      // Nur loggen, State Error würde UI evtl. verwirren, wenn es nur ein kleiner Glitch ist
+      print("Stream Setup Fehler: $e");
       state = state.copyWith(error: "Initialisierung fehlgeschlagen: $e");
     }
   }
@@ -127,7 +173,15 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
 
     switch (flag) {
       case BleConstants.flagStart:
+        print("Protocol: START Flag empfangen. Payload: ${rawData.length}");
+        
         // Struktur: [Flag(1), Index(2), SDU(1), Count(2), RamCounter(2)]
+        // Insgesamt min. 8 Bytes
+        if (rawData.length < 8) {
+             print("Fehler: Start-Paket zu kurz!");
+             return;
+        }
+
         final bd = ByteData.sublistView(Uint8List.fromList(rawData));
         final int count = bd.getUint16(BleConstants.offsetCount, Endian.little);
         final int volFactor =
@@ -150,13 +204,11 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
         final int chunkIndex = bd.getUint16(1, Endian.little);
         final int reportedSize = bd.getUint8(3);
 
-        // Payload Daten ausschneiden (Header vorne weg und mögliches padding am ende durch Längenübertragung)
+        // Payload Daten ausschneiden
         final payload = rawData.sublist(
             BleConstants.headerSize, BleConstants.headerSize + reportedSize);
 
-        // Passt die länge jetzt (falls Paket zu kurz war)
         if (payload.length == reportedSize) {
-          // Noch ne Sicherheitsstufe, dass es auch wirklich immer 4 Bytes sind
           if (payload.isNotEmpty && payload.length % 4 == 0) {
             final incomingTicks = _parseTo32Bit(Uint8List.fromList(payload));
 
@@ -164,16 +216,16 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
               rawTicks: [...state.rawTicks, ...incomingTicks],
             );
             print(
-                "Chunk $chunkIndex: ${incomingTicks.length} Ticks erfolgreich extrahiert.");
+                "Chunk $chunkIndex: ${incomingTicks.length} Ticks extrahiert. (Total: ${state.rawTicks.length}/${state.expectedTickCount})");
           }
         } else {
           print(
               "Fehler: Paket unvollständig. Erwartet: $reportedSize, vorhanden: ${payload.length}");
-          // Hier könnte man ggf. einen Fehler-State setzen
         }
         break;
 
       case BleConstants.flagEnd:
+        print("Protocol: END Flag empfangen.");
         _checkAndFinalize();
         break;
 
@@ -184,8 +236,7 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
 
   void _checkAndFinalize() {
     if (state.rawTicks.length == state.expectedTickCount) {
-      final sortedTicks = List<int>.from(state.rawTicks)
-        ..sort(); //eigentlich nicht nötig aber notfalls noch einmal sortieren
+      final sortedTicks = List<int>.from(state.rawTicks)..sort();
       final factor = state.timeCalibrationFactor ?? 1.0;
 
       final msList =
@@ -199,6 +250,7 @@ class TrichterDataHandler extends Notifier<TrichterDataState> {
         lastDurationMS: totalDuration,
         error: null,
       );
+      print("Session erfolgreich beendet. Dauer: ${totalDuration}ms");
     } else {
       state = state.copyWith(
         error:

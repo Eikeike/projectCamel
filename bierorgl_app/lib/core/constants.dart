@@ -60,6 +60,7 @@ abstract class BleConstants {
   static const int stateIdle = 0x00;
   static const int stateReady = 0x01;
   static const int stateRunning = 0x02;
+  static const int stateCalibratedWithSuccess = (stateReady | 0x80);
   static const int stateSending = 0x03;
   static const int stateCalibrating = 0x04;
   static const int stateError = 0x05;

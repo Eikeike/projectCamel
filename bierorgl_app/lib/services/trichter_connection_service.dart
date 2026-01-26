@@ -26,6 +26,7 @@ class TrichterConnectionState {
   final TrichterDeviceStatus deviceStatus;
   final String? error;
   final String? firmwareVersion;
+  final bool calibrationSuccessTrigger;
 
   const TrichterConnectionState({
     this.connectedDevice,
@@ -33,6 +34,7 @@ class TrichterConnectionState {
     this.deviceStatus = TrichterDeviceStatus.unknown,
     this.error,
     this.firmwareVersion,
+    this.calibrationSuccessTrigger = false
   });
 
   TrichterConnectionState copyWith({
@@ -41,6 +43,7 @@ class TrichterConnectionState {
     TrichterDeviceStatus? deviceStatus,
     String? error,
     String? firmwareVersion,
+    bool? calibrationSuccessTrigger,
   }) {
     return TrichterConnectionState(
       connectedDevice: connectedDevice ?? this.connectedDevice,
@@ -48,6 +51,7 @@ class TrichterConnectionState {
       deviceStatus: deviceStatus ?? this.deviceStatus,
       error: error,
       firmwareVersion: firmwareVersion ?? this.firmwareVersion,
+      calibrationSuccessTrigger: calibrationSuccessTrigger ?? false
     );
   }
 }
@@ -353,7 +357,7 @@ Future<void> disconnect() async {
     if (statusChar.properties.notify) {
       await statusChar.setNotifyValue(true);
       _statusSubscription =
-          statusChar.lastValueStream.listen(_onDeviceStateChanged);
+          statusChar.onValueReceived.listen(_onDeviceStateChanged); //only physical answers from device are reported
     }
 
     if (statusChar.properties.read) {
@@ -374,11 +378,15 @@ Future<void> disconnect() async {
     final byte = value[0];
     final TrichterDeviceStatus newStatus;
 
+    final bool isSuccessTransition = 
+      state.deviceStatus == TrichterDeviceStatus.calibrating && 
+      byte == BleConstants.stateCalibratedWithSuccess;
+
     switch (byte) {
       case BleConstants.stateIdle:
         newStatus = TrichterDeviceStatus.idle;
         break;
-      case BleConstants.stateReady:
+      case BleConstants.stateReady || BleConstants.stateCalibratedWithSuccess:
         newStatus = TrichterDeviceStatus.ready;
         break;
       case BleConstants.stateRunning:
@@ -398,7 +406,9 @@ Future<void> disconnect() async {
     }
 
     if (state.deviceStatus != newStatus) {
-      state = state.copyWith(deviceStatus: newStatus);
+      state = state.copyWith(
+        deviceStatus: newStatus,
+        calibrationSuccessTrigger: isSuccessTransition);
     }
   }
 

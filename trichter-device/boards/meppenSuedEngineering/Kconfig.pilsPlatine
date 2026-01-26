@@ -4,4 +4,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config BOARD_PILSPLATINE
+	bool "pilsPlatine NRF52832 (With buttons)"
 	select SOC_NRF52832_QFAA
+
+config BOARD_PILSPLATINE_BUTTONLESS
+    bool "pilsPlatine NRF52832 (Buttonless)"
+    select SOC_NRF52832_QFAA
+    select BUTTONLESS
+
+config BUTTONLESS
+    bool
+    help
+      Hidden symbol selected automatically by the Buttonless board variant.

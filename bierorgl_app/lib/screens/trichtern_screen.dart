@@ -79,6 +79,31 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
 
   @override
   Widget build(BuildContext context) {
+
+    ref.listen<TrichterConnectionState>(trichterConnectionProvider, (previous, next) {
+      // 1. Handle Success (using the trigger flag from the service)
+      if (next.calibrationSuccessTrigger) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Kalibrierung erfolgreich!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      // 2. Handle Failure (transition from calibrating directly to error)
+      if (previous?.deviceStatus == TrichterDeviceStatus.calibrating && 
+          next.deviceStatus == TrichterDeviceStatus.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Kalibrierung fehlgeschlagen!'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    });
+    
     // --- LISTENER (Navigation & Fehler) ---
     // Wir hören hier nur auf spezifische Änderungen für Events
     ref.listen<TrichterDataState>(trichterDataHandlerProvider,

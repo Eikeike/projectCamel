@@ -55,6 +55,7 @@ int main(void)
 	init_ble(TIMER_TICK_DURATION_US);
     /*register callbacks and handlers*/
     ble_register_state_input_handler(ble_remote_state_dispatch);
+	calib_attempt_register_notifier(ble_calibration_attempt_notifier);
     state_machine_register_notifier(ble_state_notifier);
 
 	fsm_start();

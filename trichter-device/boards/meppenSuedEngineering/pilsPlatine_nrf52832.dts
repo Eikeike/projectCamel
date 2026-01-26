@@ -1,135 +1,22 @@
-/*
- * Copyright (c) 2017 Shawn Nock <shawn@monadnock.ca>
- * Copyright (c) 2017 Linaro Limited
- * Copyright (c) 2021 Michal Morsisko
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
+/* pilsplatine_nrf52832.dts */
 /dts-v1/;
-#include <nordic/nrf52832_qfaa.dtsi>
-#include "pilsPlatine_nrf52832-pinctrl.dtsi"
-#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include "pilsplatine_common.dtsi"
 
 / {
-	model = "meppenSuedEngineering pilsPlatine NRF52832";
-	compatible = "meppenSuedEngineering,pilsPlatine-nrf52832";
-
-	chosen {
-		zephyr,console = &uart0;
-		zephyr,sram = &sram0;
-		zephyr,flash = &flash0;
-		zephyr,code-partition = &slot0_partition;
-		zephyr,settings-partition = &storage_partition_ble;
-	};
-
-	leds {
-		compatible = "gpio-leds";
-		led0: led_0 {
-			gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
-			label = "Bluetooth LED";
-		};
-	};
-
-	tm1637: tm1637 {
-	compatible = "tm1637-gpio";
-	clk-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
-	dio-gpios = <&gpio0 16 GPIO_ACTIVE_HIGH>;
+    /* Add the extra buttons to the existing container */
+    buttons {
+        pairing_btn: button_pairing {
+            gpios = <&gpio0 14 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+            label = "Bluetooth Pairing Button";
+        };
+        ready_btn: button_ready {
+            gpios = <&gpio0 15 (GPIO_ACTIVE_LOW)>;
+            label = "Ready Status Button";
+        };
     };
 
-	buttons {
-		compatible = "gpio-keys";
-		debounce-interval-ms = <1>;
-		button0: button_0 {
-			gpios = <&gpio0 14 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
-			label = "Bluetooth Pairing Button";
-		};
-		button1: button_1 {
-			gpios = <&gpio0 15 (GPIO_ACTIVE_LOW)>;
-			label = "Ready Status Button";
-		};
-		button2: button_2 {
-			gpios = <&gpio0 29 (GPIO_ACTIVE_HIGH)>;
-			label = "Sensor Input";
-		};
-		button3: button_3 {
-            label = "DFU button";
-            gpios = <&gpio0 20 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        };
-	};
-
-	/* These aliases are provided for compatibility with samples */
-	aliases {
-		led0 = &led0;
-		buttonpairing = &button0;
-		buttonrdy = &button1;
-		buttontest = &button2;
-		mcuboot-button0 = &button0;
-		hw-timer = &timer2;
-	};
-};
-
-&uicr {
-	gpio-as-nreset;
-	nfct-pins-as-gpios;
-};
-
-&gpiote {
-	status = "okay";
-};
-
-&gpio0 {
-	status = "okay";
-};
-
-&timer2 {
-	status = "okay";
-	max-bit-width = <32>;
-	prescaler = <7>;
-	counter {
-		status = "okay";
-	};
-};
-
-&uart0 {
-	status = "okay";
-	compatible = "nordic,nrf-uarte";
-	current-speed = <115200>;
-	pinctrl-0 = <&uart0_default>;
-	pinctrl-1 = <&uart0_sleep>;
-	pinctrl-names = "default", "sleep";
-};
-
-&flash0 {
-
-	partitions {
-		compatible = "fixed-partitions";
-		#address-cells = <1>;
-		#size-cells = <1>;
-
-		boot_partition: partition@0 {
-			label = "mcuboot";
-			reg = <0x00000000 0xc000>;
-		};
-		slot0_partition: partition@c000 {
-			label = "image-0";
-			reg = <0x0000C000 0x32000>;
-		};
-		slot1_partition: partition@3e000 {
-			label = "image-1";
-			reg = <0x0003E000 0x32000>;
-		};
-		scratch_partition: partition@70000 {
-			label = "image-scratch";
-			reg = <0x00070000 0xa000>;
-		};
-		storage_partition_ble: partition@7a000 {
-			label = "storage_ble";
-			reg = <0x0007a000 0x00003000>;
-		};
-		storage_partition_app: partition@7d000 {
-			label = "storage_app";
-			reg = <0x0007d000 0x00003000>;
-		};
-	};
+    aliases {
+        buttonpairing = &pairing_btn;
+        buttonrdy = &ready_btn;
+    };
 };

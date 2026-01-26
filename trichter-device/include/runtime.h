@@ -30,5 +30,8 @@ void ble_delete_active_connection();
 int get_timer_tick_duration();
 void on_trichter_startup();
 
+typedef void (*CalibrationAttempt)(bool);
+void calib_attempt_register_notifier(CalibrationAttempt notifier);
+
 
 #endif //ZEPHYR_RUNTIME_H_

@@ -20,6 +20,9 @@
 #define MAX_SDU_SIZE_BYTE       243 //247 MTU - 4 byte header
 #define COUNT_BYTES(num)        (num * sizeof(uint32_t))
 
+#define BT_CUSTOM_INTERVAL_SLOW_MIN 1364 //852.5ms, as per apple developer guidelines
+#define BT_CUSTOM_INTERVAL_SLOW_MAX 1365 //clamp to 852.5
+
 static bool g_is_advertising = false;
 static bool g_is_connected = false;
 static bool g_restart_adv = false;
@@ -35,6 +38,10 @@ K_SEM_DEFINE(indication_sem, 0, 1);
 K_THREAD_STACK_DEFINE(retry_work_stack, 512);
 struct k_work_q retry_work;
 struct k_work work; // For retry
+
+void adv_timer_exp(struct k_timer *timer);
+static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
+#define FAST_ADV_TIME_SEC   30
 
 static struct k_work adv_work;
 
@@ -89,6 +96,7 @@ static struct bt_gatt_indicate_params ind_params;
 static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
 
 static StateID_t g_remote_state;
+bool g_is_valid_calibration_attempt = false;
 
 /* Custom 128-bit UUIDs */
 #define BT_UUID_CUSTOM_SERVICE_VAL \
@@ -121,7 +129,7 @@ void ble_state_notifier(StateID_t state);
 static void adv_work_handler(struct k_work *work)
 {
     printk("Work Queue: Starting Advertising now...\n");
-    ble_start_adv();
+    ble_start_adv(BLE_ADV_FAST); //fast advertising
 }
 
 // FIX: CCC Handler um "Notify/Indicate OFF" zu erkennen
@@ -280,12 +288,18 @@ void ble_state_notifier(StateID_t state)
     if (!g_is_connected || !g_bulk_service.current_conn) {
         return;
     }
-
+    int combined_state = g_remote_state | (g_is_valid_calibration_attempt ? 0x80 : 0x0);
     bt_gatt_notify(g_bulk_service.current_conn,
                    &custom_svc.attrs[9],
-                   &g_remote_state,
-                   sizeof(g_remote_state));
+                   &combined_state,
+                   sizeof(combined_state));
 }
+
+
+void ble_calibration_attempt_notifier(bool success)
+{
+    g_is_valid_calibration_attempt = success;
+};
 
 // =========================================================================
 //  CONNECTION CALLBACKS
@@ -358,22 +372,35 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 //  CONTROL FUNCTIONS
 // =========================================================================
 
-void ble_start_adv()
+void ble_start_adv(bool slow)
 {
     int err = 0;
-    // g_is_connected = 0; // Nicht erzwingen, Status wird in Disconnect geregelt
-    printk("Advertising started\n");
+    printk("Advertising stopped and restarted\n");
     
-    if (!g_is_advertising)
-    {
-        err = bt_le_adv_start(BT_LE_ADV_CONN_FAST_1, ad, ARRAY_SIZE(ad), sd, ARRAY_SIZE(sd));
-        if (err) {
-            printk("Bluetooth advertising start failed (err %d)\n", err);
-            return;
-        }
+    bt_le_adv_stop();
+    k_sleep(K_MSEC(50));
+
+    const struct bt_le_adv_param *adv_param_slow =
+    BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN,
+                    BT_CUSTOM_INTERVAL_SLOW_MIN,
+                    BT_CUSTOM_INTERVAL_SLOW_MAX,
+                    NULL);
+
+    const struct bt_le_adv_param *adv_param_fast =
+        BT_LE_ADV_CONN_FAST_1;
+
+    err = bt_le_adv_start(slow ? adv_param_slow : adv_param_fast,
+                        ad, ARRAY_SIZE(ad),
+                        sd, ARRAY_SIZE(sd));
+    if (err) {
+        printk("Bluetooth advertising start failed (err %d)\n", err);
+        return;
+    } else {
+        k_timer_start(&adv_timer, K_SECONDS(FAST_ADV_TIME_SEC), K_NO_WAIT);
     }
     g_is_advertising = true;
 }
+
 
 void ble_stop_adv()
 {
@@ -476,7 +503,6 @@ int ble_send_start()
     ind_params.data = tx_buffer;
     ind_params.len = sizeof(header) + sizeof(g_bulk_service.count) + sizeof(ram_copy_counter);
 
-    // FIX: Semaphor zurücksetzen vor dem Start
     k_sem_reset(&indication_sem);
 
     if (g_bulk_service.current_conn) {
@@ -593,4 +619,14 @@ int ble_send_chunk()
     g_bulk_service.idx_to_send += g_bulk_service.sdu_size;
 
     return err;
+}
+
+
+void adv_timer_exp(struct k_timer *timer)
+{
+	ble_stop_adv();
+	
+	#ifdef CONFIG_BUTTONLESS
+        ble_start_adv(BLE_ADV_SLOW); //slow advertising
+	#endif //CONFIG_BUTTONLESS
 }

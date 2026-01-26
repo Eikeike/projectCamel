@@ -6,7 +6,9 @@
 
 
 int init_ble(uint8_t timer_tick_duration);
-void ble_start_adv();
+void ble_start_adv(bool adv_slow);
+#define BLE_ADV_FAST false
+#define BLE_ADV_SLOW true 
 void ble_stop_adv();
 
 int ble_send_start();
@@ -27,5 +29,6 @@ typedef enum RemoteState {
 typedef void (*RemoteStateInputHandler)(RemoteState);
 void ble_register_state_input_handler(RemoteStateInputHandler handler);
 void ble_state_notifier(StateID_t state);
+void ble_calibration_attempt_notifier(bool success);
 
 #endif //TRICHTER_BLUETOOTH_H
