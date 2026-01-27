@@ -119,6 +119,8 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
               const SizedBox(height: 10),
               Text(
                 'Für eine erfolgreiche Kalibrierung:',
+                softWrap: false, // Disables line breaking
+                overflow: TextOverflow.visible,
                 style: TextStyle(color: colorScheme.onError),
               ),
               const SizedBox(height: 6),
