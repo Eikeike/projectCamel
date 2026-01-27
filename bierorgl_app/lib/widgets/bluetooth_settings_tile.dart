@@ -15,7 +15,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scanState = ref.watch(trichterScanProvider);
     final connectionState = ref.watch(trichterConnectionProvider);
-    
+
     // HINWEIS: Der spezielle "Kalibrierung läuft"-Block wurde hier entfernt.
     // Es wird nun immer die Standard-Kachel angezeigt.
 
@@ -202,9 +202,9 @@ class BluetoothSettingsTile extends ConsumerWidget {
                         separatorBuilder: (_, __) => const SizedBox(height: 4),
                         itemBuilder: (context, index) {
                           final result = devices[index];
-                          final deviceName = result.device.platformName.isEmpty
+                          final deviceName = result.device.advName.isEmpty
                               ? "Unbekannter Trichter"
-                              : result.device.platformName;
+                              : result.device.advName;
 
                           return Container(
                             decoration: BoxDecoration(
@@ -288,8 +288,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
   // ===========================================================================
   Widget _buildConnectedDeviceCard(
       BuildContext context, WidgetRef ref, TrichterConnectionState state) {
-    final deviceName =
-        state.connectedDevice?.platformName ?? "Unbekannter Trichter";
+    final deviceName = state.connectedDevice?.advName ?? "Unbekannter Trichter";
     final status = state.deviceStatus;
     final notifier = ref.read(trichterConnectionProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
@@ -339,8 +338,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
               IconButton(
                 onPressed: () {
                   notifier.disconnect();
-                  if (context.mounted)
-                  {
+                  if (context.mounted) {
                     Navigator.pop(context);
                   }
                 },
@@ -428,14 +426,12 @@ class BluetoothSettingsTile extends ConsumerWidget {
       case TrichterDeviceStatus.calibrating:
         return [
           // Sende "Ready", um internen Wait-Loop am Gerät zu beenden
-          btn("Zurück", Icons.arrow_back,
-              () {
-                  notifier.requestState(TrichterDeviceStatus.ready);
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                  }
-              } ,
-              isPrimary: false),
+          btn("Zurück", Icons.arrow_back, () {
+            notifier.requestState(TrichterDeviceStatus.ready);
+            if (context.mounted) {
+              Navigator.pop(context);
+            }
+          }, isPrimary: false),
         ];
       // ERROR -> Reset
       case TrichterDeviceStatus.error:
@@ -464,7 +460,7 @@ class BluetoothSettingsTile extends ConsumerWidget {
       return "Bluetooth ausgeschaltet";
     }
     if (connState.status == TrichterConnectionStatus.connected) {
-      return connState.connectedDevice?.platformName ?? "Verbunden";
+      return connState.connectedDevice?.advName ?? "Verbunden";
     }
     return "Tippen zum Verbinden";
   }

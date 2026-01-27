@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth is used to find and connect to nearby Bierorgls.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Diese App benötigt Bluetooth, um sich mit deiner Bierorgl zu verbinden.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Location is used to save Trichter Location.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

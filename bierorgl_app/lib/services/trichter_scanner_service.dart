@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -75,15 +76,25 @@ class TrichterScannerService extends Notifier<TrichterScanState> {
   Future<void> startScan() async {
     if (state.isScanning) return;
 
-    final statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.location,
-    ].request();
+    if (Platform.isAndroid) {
+      final statuses = await [
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.location,
+      ].request();
 
-    if (statuses.values.any((s) => !s.isGranted)) {
-      state = state.copyWith(error: "Berechtigungen fehlen");
-      return;
+      if (statuses.values.any((s) => !s.isGranted)) {
+        state = state.copyWith(error: "Berechtigungen fehlen");
+        return;
+      }
+    } else if (Platform.isIOS) {
+      // On iOS, we check the adapter state rather than manual permission requesting
+      // FlutterBluePlus handles the internal Bluetooth permission prompt when startScan is called.
+      var adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState == BluetoothAdapterState.unauthorized) {
+        state = state.copyWith(error: "Bluetooth-Berechtigung abgelehnt");
+        return;
+      }
     }
 
     state =

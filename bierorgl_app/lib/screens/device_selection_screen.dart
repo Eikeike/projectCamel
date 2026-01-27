@@ -41,9 +41,11 @@ class DeviceSelectionScreen extends ConsumerWidget {
             child: Card(
               color: Colors.white,
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15)),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -52,12 +54,15 @@ class DeviceSelectionScreen extends ConsumerWidget {
                         const SizedBox(width: 10),
                         Icon(
                           Icons.bluetooth,
-                          color: bluetoothState.isEnabled ? accentBlue : Colors.grey[400],
+                          color: bluetoothState.isEnabled
+                              ? accentBlue
+                              : Colors.grey[400],
                         ),
                         const SizedBox(width: 15),
                         const Text(
                           'Bluetooth Status',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -71,7 +76,6 @@ class DeviceSelectionScreen extends ConsumerWidget {
               ),
             ),
           ),
-
           if (bluetoothState.isEnabled)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -81,75 +85,89 @@ class DeviceSelectionScreen extends ConsumerWidget {
                   onPressed: bluetoothState.isScanning
                       ? null
                       : () async {
-                    if (await _requestPermissions()) {
-                      bluetoothNotifier.startScan();
-                    }
-                  },
+                          if (await _requestPermissions()) {
+                            bluetoothNotifier.startScan();
+                          }
+                        },
                   icon: bluetoothState.isScanning
                       ? const SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
                       : const Icon(Icons.search),
-                  label: Text(bluetoothState.isScanning ? 'Suche läuft...' : 'Nach Trichter suchen'),
+                  label: Text(bluetoothState.isScanning
+                      ? 'Suche läuft...'
+                      : 'Nach Trichter suchen'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: accentOrange,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
               ),
             ),
-
           const SizedBox(height: 20),
-
           Expanded(
-            child: bluetoothState.availableDevices.isEmpty && !bluetoothState.isScanning
+            child: bluetoothState.availableDevices.isEmpty &&
+                    !bluetoothState.isScanning
                 ? _buildEmptyState()
                 : ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: bluetoothState.availableDevices.length,
-              itemBuilder: (context, index) {
-                final result = bluetoothState.availableDevices[index];
-                final device = result.device;
-                final deviceName = device.platformName.isEmpty ? 'Bierorgl Trichter' : device.platformName;
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: bluetoothState.availableDevices.length,
+                    itemBuilder: (context, index) {
+                      final result = bluetoothState.availableDevices[index];
+                      final device = result.device;
+                      final deviceName = device.advName.isEmpty
+                          ? 'Bierorgl Trichter'
+                          : device.advName;
 
-                return Card(
-                  elevation: 1,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: accentBlue.withOpacity(0.1),
-                      child: const Icon(Icons.sports_bar, color: accentBlue, size: 20),
-                    ),
-                    title: Text(deviceName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(device.remoteId.toString()),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () async {
-                      await bluetoothNotifier.connectToDevice(device);
-                      if (context.mounted) Navigator.pop(context);
+                      return Card(
+                        elevation: 1,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: accentBlue.withOpacity(0.1),
+                            child: const Icon(Icons.sports_bar,
+                                color: accentBlue, size: 20),
+                          ),
+                          title: Text(deviceName,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text(device.remoteId.toString()),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () async {
+                            await bluetoothNotifier.connectToDevice(device);
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                        ),
+                      );
                     },
                   ),
-                );
-              },
-            ),
           ),
-
           if (bluetoothState.error != null)
             Padding(
               padding: const EdgeInsets.all(20),
-              child: Text(bluetoothState.error!, style: const TextStyle(color: Colors.redAccent)),
+              child: Text(bluetoothState.error!,
+                  style: const TextStyle(color: Colors.redAccent)),
             ),
-
           Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Expanded(child: TextButton(onPressed: () {}, child: const Text('Hilfe'))),
+                Expanded(
+                    child: TextButton(
+                        onPressed: () {}, child: const Text('Hilfe'))),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
-                Expanded(child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Abbrechen'))),
+                Expanded(
+                    child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Abbrechen'))),
               ],
             ),
           ),
@@ -174,7 +192,8 @@ class DeviceSelectionScreen extends ConsumerWidget {
         children: [
           Icon(Icons.bluetooth_searching, size: 64, color: Colors.grey),
           SizedBox(height: 16),
-          Text('Suche nach kompatiblen Trichtern...', style: TextStyle(color: Colors.grey)),
+          Text('Suche nach kompatiblen Trichtern...',
+              style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
