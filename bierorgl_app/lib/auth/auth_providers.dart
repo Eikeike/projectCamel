@@ -68,30 +68,13 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> login(String email, String password) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
-
     try {
       await _authRepository.login(email: email, password: password);
-
-      final userId = await _authRepository.getStoredUserIdAllowingExpired();
-
-      if (userId == null) {
-        throw Exception('Login erfolgreich, aber User-ID fehlt im Token.');
-      }
-      await DatabaseHelper().updateLoggedInUser(userId);
-
-      if (!ref.mounted) return;
-      state = state.copyWith(
-        isLoading: false,
-        userId: userId,
-        errorMessage: null,
-      );
+      await _afterAuthSuccess();
     } catch (e) {
       if (!ref.mounted) return;
       state = state.copyWith(
-        isLoading: false,
-        userId: null,
-        errorMessage: e.toString(),
-      );
+          isLoading: false, userId: null, errorMessage: e.toString());
     }
   }
 
@@ -104,6 +87,64 @@ class AuthController extends Notifier<AuthState> {
       errorMessage: null,
       isLoading: false,
     );
+  }
+
+  Future<void> register({
+    required String email,
+    required String username,
+    String? firstName,
+    String? lastName,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      await _authRepository.register(
+        email: email,
+        username: username,
+        firstName: firstName,
+        lastName: lastName,
+        password: password,
+        confirmPassword: confirmPassword,
+      );
+
+      await _afterAuthSuccess();
+    } catch (e) {
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        isLoading: false,
+        userId: null,
+        errorMessage: e.toString(),
+      );
+    }
+  }
+
+  Future<void> requestPasswordReset(String email) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+
+    try {
+      await _authRepository.requestPasswordReset(email: email);
+    } catch (e) {
+      state = state.copyWith(errorMessage: e.toString());
+    } finally {
+      if (ref.mounted) {
+        state = state.copyWith(isLoading: false);
+      }
+    }
+  }
+
+  Future<void> _afterAuthSuccess() async {
+    final userId = await _authRepository.getStoredUserIdAllowingExpired();
+    if (userId == null) {
+      throw Exception('Auth erfolgreich, aber User-ID fehlt im Token.');
+    }
+    await DatabaseHelper().updateLoggedInUser(userId);
+
+    if (!ref.mounted) return;
+    state =
+        state.copyWith(isLoading: false, userId: userId, errorMessage: null);
+    ref.read(autoSyncControllerProvider).triggerSync();
   }
 }
 

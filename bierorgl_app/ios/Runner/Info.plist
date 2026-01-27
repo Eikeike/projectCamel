@@ -30,6 +30,8 @@
 	<string>Bluetooth is used to find and connect to nearby Bierorgls.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Location is used to save Trichter Location.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Location is used to save Trichter Location.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -43,5 +45,9 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<key>UIRequiresFullScreen</key>
+<true/>
+<key>ITSAppUsesNonExemptEncryption</key>
+<false/>
 </dict>
 </plist>
