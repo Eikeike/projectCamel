@@ -58,6 +58,7 @@ int main(void)
 	calib_attempt_register_notifier(ble_calibration_attempt_notifier);
     state_machine_register_notifier(ble_state_notifier);
 
+	bluetooth_advertising_fsm_start();
 	fsm_start();
     on_trichter_startup();
 

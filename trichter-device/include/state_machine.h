@@ -65,11 +65,15 @@ extern const State_t STATES[NUM_STATES + 1];
 
 
 typedef struct {
+    const char *name;
     const State_t *current;
+    const State_t *states;
+    uint8_t num_states;
     StateID_t requestStateDeferred;
     int error;
     struct k_mutex lock;
     uint16_t period_ms;
+    bool notify;
 } StateMachine_t;
 
 

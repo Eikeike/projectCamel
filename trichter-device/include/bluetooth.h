@@ -6,17 +6,12 @@
 
 
 int init_ble(uint8_t timer_tick_duration);
-void ble_start_adv(bool adv_slow);
-#define BLE_ADV_FAST false
-#define BLE_ADV_SLOW true 
-void ble_stop_adv();
 
 int ble_send_start();
 bool is_ble_connected();
 int ble_send_chunk();
 int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements);
 bool ble_is_sending();
-bool ble_is_adv();
 void delete_all_connections();
 
 typedef enum RemoteState {

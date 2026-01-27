@@ -51,3 +51,5 @@ tags
 .flutter-plugins-dependencies
 **/.pub-cache/
 **/.packages
+
+bierorgl_app/.pub_cache_workaround

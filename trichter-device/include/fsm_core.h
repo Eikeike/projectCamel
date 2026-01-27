@@ -15,4 +15,6 @@ void fsm_main(void *p1, void *p2, void *p3);
 uint8_t fsm_transition(StateID_t targetState);
 uint8_t fsm_transition_deferred(StateID_t state);
 
+uint8_t ble_fsm_transition(StateMachine_t *sm, StateID_t state);
+uint8_t ble_fsm_transition_deferred(StateMachine_t *sm, StateID_t state);
 #endif //FSM_CORE_H
