@@ -19,6 +19,7 @@
 #include "memory.h"
 #include "zephyr/drivers/gpio.h"
 #include "zephyr/kernel.h"
+#include "bluetooth_advertising.h"
 
 #define TICKS_PER_LTR 300
 static volatile uint32_t g_timestamps[TICKS_PER_LTR];
@@ -112,10 +113,7 @@ void input_request_state_ready()
 void input_request_pairing_mode()
 {
 	ble_delete_active_connection();
-	if (!ble_is_adv())
-	{
-		ble_start_adv(BLE_ADV_FAST);
-	}
+	bluetooth_advertising_start_fast();
 }
 
 
@@ -171,7 +169,7 @@ void timer_reset()
 
 void on_trichter_startup()
 {
-	ble_start_adv(BLE_ADV_FAST);
+	bluetooth_advertising_start_fast();
     fsm_transition_deferred(STATE_READY);
 }
 
@@ -227,9 +225,9 @@ uint8_t ReadyEntry(void)
 	reset_sensor_run_state();
 
 	#ifndef CONFIG_BUTTONLESS
-	if (!ble_is_adv() && !is_ble_connected())
+	if (!is_ble_connected())
 	{
-		ble_start_adv(BLE_ADV_FAST); //fast adv
+		bluetooth_advertising_start_fast();
 	}
 	#endif
 
@@ -243,17 +241,14 @@ uint8_t ReadyRun(void)
 	#ifdef CONFIG_BUTTONLESS
 	if (!is_ble_connected())
 	{
-		if (!ble_is_adv())
+		bluetooth_advertising_start_fast();
+	} else {
+		//blinking while advertising
+		uint64_t now = k_uptime_get();
+		if ((now - last_timestamp_blink) > ADV_BLINK_TIME_MS)
 		{
-			ble_start_adv(BLE_ADV_FAST);
-		} else {
-			//blinking while advertising
-			uint64_t now = k_uptime_get();
-			if ((now - last_timestamp_blink) > ADV_BLINK_TIME_MS)
-			{
-				gpio_pin_toggle_dt(&led);
-				last_timestamp_blink = now;
-			}
+			gpio_pin_toggle_dt(&led);
+			last_timestamp_blink = now;
 		}
 	}
 	if (is_ble_connected()) {
@@ -273,7 +268,7 @@ uint8_t ReadyExit(void)
 {
 	k_timer_stop(&fsm_timer); //TODO assign fsm_timer to state machine and stop it on each transition request
 	#ifndef CONFIG_BUTTONLESS
-	ble_stop_adv();
+	bluetooth_advertising_stop();
 	#endif
 	return ERR_NONE;
 };
@@ -281,7 +276,7 @@ uint8_t ReadyExit(void)
 
 uint8_t RunningEntry(void)
 {
-	ble_stop_adv();
+	bluetooth_advertising_stop();
 	g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
 	return ERR_NONE;
 };

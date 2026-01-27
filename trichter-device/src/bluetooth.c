@@ -20,12 +20,7 @@
 #define MAX_SDU_SIZE_BYTE       243 //247 MTU - 4 byte header
 #define COUNT_BYTES(num)        (num * sizeof(uint32_t))
 
-#define BT_CUSTOM_INTERVAL_SLOW_MIN 1364 //852.5ms, as per apple developer guidelines
-#define BT_CUSTOM_INTERVAL_SLOW_MAX 1365 //clamp to 852.5
-
-static bool g_is_advertising = false;
 static bool g_is_connected = false;
-static bool g_restart_adv = false;
 
 static uint8_t g_timer_tick_duration = 0;
 
@@ -38,12 +33,6 @@ K_SEM_DEFINE(indication_sem, 0, 1);
 K_THREAD_STACK_DEFINE(retry_work_stack, 512);
 struct k_work_q retry_work;
 struct k_work work; // For retry
-
-void adv_timer_exp(struct k_timer *timer);
-static K_TIMER_DEFINE(adv_timer, adv_timer_exp, NULL);
-#define FAST_ADV_TIME_SEC   30
-
-static struct k_work adv_work;
 
 enum transmission_flags {
     TX_FLAG_START = 0xAA,
@@ -99,8 +88,6 @@ static StateID_t g_remote_state;
 bool g_is_valid_calibration_attempt = false;
 
 /* Custom 128-bit UUIDs */
-#define BT_UUID_CUSTOM_SERVICE_VAL \
-    BT_UUID_128_ENCODE(0xaf56d6dd, 0x3c39, 0x4d67, 0x9bbe, 0x4fb04fa327cc)
 
 #define BT_UUID_ARRAY_CHARACTERISTIC_VAL \
     BT_UUID_128_ENCODE( 0xf9d76937, 0xbd70, 0x4e4f, 0xa4da, 0x0b718d5f5b6d)
@@ -111,8 +98,6 @@ BT_UUID_128_ENCODE(0x23de2cad, 0x0fc8, 0x49f4, 0xbbcc, 0x5eb2c9fdb91b)
 #define BT_UUID_REMOTE_STATE_CHAR_VAL \
     BT_UUID_128_ENCODE(0x9b6d1c3a, 0x91a2, 0x4f23, 0x8c11, 0x1a2b3c4d5e6f)
 
-
-static struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_SERVICE_VAL);
 static struct bt_uuid_128 drinking_char_uuid = BT_UUID_INIT_128(BT_UUID_ARRAY_CHARACTERISTIC_VAL);
 static struct bt_uuid_128 time_constant_char_uuid = BT_UUID_INIT_128(BT_UUID_CALIB_CHAR_VAL);
 static struct bt_uuid_128 remote_state_char_uuid = BT_UUID_INIT_128(BT_UUID_REMOTE_STATE_CHAR_VAL);
@@ -121,18 +106,6 @@ static RemoteStateInputHandler g_remote_input_handler = NULL;
 
 void ble_state_notifier(StateID_t state);
 
-// =========================================================================
-//  HELPER FUNCTIONS
-// =========================================================================
-
-// FIX: Handler für Advertising Work Queue (Verhindert Crash im Disconnect Callback)
-static void adv_work_handler(struct k_work *work)
-{
-    printk("Work Queue: Starting Advertising now...\n");
-    ble_start_adv(BLE_ADV_FAST); //fast advertising
-}
-
-// FIX: CCC Handler um "Notify/Indicate OFF" zu erkennen
 static void ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
 {
     bool indicate_enabled = (value == BT_GATT_CCC_INDICATE);
@@ -140,21 +113,16 @@ static void ccc_cfg_changed(const struct bt_gatt_attr *attr, uint16_t value)
     
     printk("CCC Change: Value 0x%04x (Indicate: %d, Notify: %d)\n", value, indicate_enabled, notify_enabled);
 
-    // Wenn App "Stop" sagt (value == 0), stoppen wir alles
     if (!indicate_enabled && !notify_enabled) {
         if (g_bulk_service.transmission_active) {
             printk("CCC disabled: Stopping transmission and releasing semaphore.\n");
             g_bulk_service.transmission_active = false;
-            // Falls der Sendethread wartet, befreien wir ihn
             k_sem_give(&indication_sem); 
         }
     }
 }
 
-// =========================================================================
-//  GATT CALLBACKS
-// =========================================================================
-
+// GATT callbacks
 void ble_register_state_input_handler(RemoteStateInputHandler handler)
 {
     if (handler != NULL) {
@@ -167,7 +135,6 @@ static ssize_t write_remote_state(struct bt_conn *conn,
                                   const void *buf, uint16_t len,
                                   uint16_t offset, uint8_t flags)
 {
-    printk("Received %d with len %d\n", *(const uint8_t *)buf, len);
     if (len != sizeof(uint8_t)) {
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
@@ -227,10 +194,6 @@ static ssize_t read_time_constant(struct bt_conn *conn,
                              &g_timer_tick_duration, sizeof(g_timer_tick_duration));
 }
 
-// =========================================================================
-//  SERVICE DEFINE
-// =========================================================================
-
 /* Define custom service */
 BT_GATT_SERVICE_DEFINE(custom_svc,
     BT_GATT_PRIMARY_SERVICE(&custom_service_uuid),                                /*Index 0*/
@@ -269,18 +232,6 @@ BT_GATT_SERVICE_DEFINE(custom_svc,
 );
 
 
-/* Advertising data */
-static const struct bt_data ad[] = {
-    BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
-    BT_DATA(BT_DATA_NAME_COMPLETE,
-            CONFIG_BT_DEVICE_NAME,
-            sizeof(CONFIG_BT_DEVICE_NAME) - 1) // sizeof ist sicherer als strlen bei Konstanten
-};
-
-static const struct bt_data sd[] = {
-    BT_DATA_BYTES(BT_DATA_UUID128_ALL, BT_UUID_CUSTOM_SERVICE_VAL)
-};
- 
 void ble_state_notifier(StateID_t state)
 {
     g_remote_state = state;
@@ -295,34 +246,25 @@ void ble_state_notifier(StateID_t state)
                    sizeof(combined_state));
 }
 
-
 void ble_calibration_attempt_notifier(bool success)
 {
     g_is_valid_calibration_attempt = success;
-};
+}
 
-// =========================================================================
-//  CONNECTION CALLBACKS
-// =========================================================================
-
+// Connection callbacks
 static void connected(struct bt_conn *conn, uint8_t err)
 {
     if (err) {
         printk("Connection failed (err 0x%02x)\n", err);
         return;
     }
-
-    printk("Connected\n");
     
-    // Doppelte Verbindungen vermeiden
+    printk("Connected\n");
     if (g_is_connected) {
         bt_conn_disconnect(conn, BT_HCI_ERR_CONN_LIMIT_EXCEEDED);
         return;
     }
-    
-    ble_stop_adv();
-    g_restart_adv = false;
-    g_is_connected = true; // Use bool true
+    g_is_connected = true;
     g_bulk_service.current_conn = bt_conn_ref(conn);
 }
 
@@ -336,29 +278,19 @@ void ble_delete_active_connection()
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-    printk("Disconnected (reason 0x%02x)\n", reason);
-    
-    // 1. Status sofort setzen
+     printk("Disconnected (reason 0x%02x)\n", reason);
     g_is_connected = false;
     g_bulk_service.transmission_active = false;
-    
-    // 2. Deadlock verhindern: Semaphor freigeben, falls ein Thread wartet
     k_sem_give(&indication_sem);
 
-    // 3. Referenz aufräumen
     if (g_bulk_service.current_conn) {
         bt_conn_unref(g_bulk_service.current_conn);
         g_bulk_service.current_conn = NULL;
     }
-
-    // 4. Advertising über WorkQueue starten (Nicht direkt hier!)
-    g_restart_adv = true;
-    k_work_submit(&adv_work);
 }
 
 static void recycled()
 {
-    // Hier nichts Kritisches machen
     printk("Recycled callback\n");
 }
 
@@ -368,55 +300,6 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
     .recycled = recycled
 };
 
-// =========================================================================
-//  CONTROL FUNCTIONS
-// =========================================================================
-
-void ble_start_adv(bool slow)
-{
-    int err = 0;
-    printk("Advertising stopped and restarted\n");
-    
-    bt_le_adv_stop();
-    k_sleep(K_MSEC(50));
-
-    const struct bt_le_adv_param *adv_param_slow =
-    BT_LE_ADV_PARAM(BT_LE_ADV_OPT_CONN,
-                    BT_CUSTOM_INTERVAL_SLOW_MIN,
-                    BT_CUSTOM_INTERVAL_SLOW_MAX,
-                    NULL);
-
-    const struct bt_le_adv_param *adv_param_fast =
-        BT_LE_ADV_CONN_FAST_1;
-
-    err = bt_le_adv_start(slow ? adv_param_slow : adv_param_fast,
-                        ad, ARRAY_SIZE(ad),
-                        sd, ARRAY_SIZE(sd));
-    if (err) {
-        printk("Bluetooth advertising start failed (err %d)\n", err);
-        return;
-    } else {
-        k_timer_start(&adv_timer, K_SECONDS(FAST_ADV_TIME_SEC), K_NO_WAIT);
-    }
-    g_is_advertising = true;
-}
-
-
-void ble_stop_adv()
-{
-    int ret = 1;
-    if (g_is_advertising)
-    {
-        ret = bt_le_adv_stop();
-        if (ret != 0)
-        {
-            printk("Advertising could not be stopped\n");
-        } else {
-            printk("Advertising stopped successfully\n");
-        }
-        g_is_advertising = false;
-    }
-}
 
 int init_ble(uint8_t timer_tick_duration)
 {
@@ -449,6 +332,7 @@ bool is_ble_connected()
 {
     return g_is_connected;
 };
+
 
 // =========================================================================
 //  SENDING LOGIC
@@ -520,10 +404,6 @@ bool ble_is_sending()
     return g_bulk_service.transmission_active;
 }
 
-bool ble_is_adv()
-{
-    return g_is_advertising;
-}
 
 int ble_prepare_send(uint32_t *data_buffer, const uint32_t num_elements)
 {
@@ -619,14 +499,4 @@ int ble_send_chunk()
     g_bulk_service.idx_to_send += g_bulk_service.sdu_size;
 
     return err;
-}
-
-
-void adv_timer_exp(struct k_timer *timer)
-{
-	ble_stop_adv();
-	
-	#ifdef CONFIG_BUTTONLESS
-        ble_start_adv(BLE_ADV_SLOW); //slow advertising
-	#endif //CONFIG_BUTTONLESS
 }
