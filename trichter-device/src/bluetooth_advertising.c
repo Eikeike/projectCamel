@@ -59,7 +59,7 @@ static const State_t BLE_STATES[NUM_STATES_BLE] =
         .onEntry = ble_state_idle,
         .runLoop = ble_state_no_impl,
         .onExit  = ble_state_no_impl,
-        .allowedTransitions = {BLE_STATE_ADV_FAST, BLE_STATE_ADV_SLOW, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
+        .allowedTransitions = {BLE_STATE_ADV_FAST, BLE_STATE_ADV_SLOW, BLE_STATE_ERROR, BLE_STATE_MAX, BLE_STATE_MAX}
     },
     [BLE_STATE_ADV_FAST] =
     {
@@ -67,7 +67,7 @@ static const State_t BLE_STATES[NUM_STATES_BLE] =
         .onEntry = ble_state_adv_fast,
         .runLoop = ble_state_no_impl,
         .onExit  = ble_state_no_impl,
-        .allowedTransitions = {BLE_STATE_IDLE, BLE_STATE_ADV_SLOW, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
+        .allowedTransitions = {BLE_STATE_STOP, BLE_STATE_ADV_SLOW, BLE_STATE_ERROR, BLE_STATE_MAX, BLE_STATE_MAX}
     },
     [BLE_STATE_ADV_SLOW] =
     {
@@ -75,7 +75,7 @@ static const State_t BLE_STATES[NUM_STATES_BLE] =
         .onEntry = ble_state_adv_slow,
         .runLoop = ble_state_no_impl,
         .onExit  = ble_state_no_impl,
-        .allowedTransitions = {BLE_STATE_IDLE, BLE_STATE_ADV_FAST, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
+        .allowedTransitions = {BLE_STATE_STOP, BLE_STATE_ADV_FAST, BLE_STATE_ERROR, BLE_STATE_MAX, BLE_STATE_MAX}
     },
     [BLE_STATE_STOP] =
     {
@@ -83,7 +83,7 @@ static const State_t BLE_STATES[NUM_STATES_BLE] =
         .onEntry = ble_state_stop,
         .runLoop = ble_state_no_impl,
         .onExit  = ble_state_no_impl,
-        .allowedTransitions = {BLE_STATE_IDLE, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
+        .allowedTransitions = {BLE_STATE_IDLE, BLE_STATE_ERROR, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
     },
     [BLE_STATE_ERROR] =
     {
@@ -91,7 +91,7 @@ static const State_t BLE_STATES[NUM_STATES_BLE] =
         .onEntry = ble_state_error,
         .runLoop = ble_state_no_impl,
         .onExit  = ble_state_no_impl,
-        .allowedTransitions = {BLE_STATE_IDLE, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
+        .allowedTransitions = {BLE_STATE_IDLE, BLE_STATE_STOP, BLE_STATE_MAX, BLE_STATE_MAX, BLE_STATE_MAX}
     },
 };
 
