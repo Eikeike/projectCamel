@@ -1,6 +1,9 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:project_camel/auth/auth_providers.dart';
+import 'package:project_camel/core/constants.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class RegisterForm extends ConsumerStatefulWidget {
   const RegisterForm({super.key});
@@ -19,6 +22,7 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
 
   bool _passwordVisible = false;
   bool _confirmPasswordVisible = false;
+  bool _acceptedPrivacy = false;
 
   @override
   void dispose() {
@@ -31,7 +35,28 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
     super.dispose();
   }
 
+  Future<void> _openPrivacyPolicy() async {
+    final ok = await launchUrl(
+      Uri.parse(AppConstants.privacyURL),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Konnte Link nicht öffnen')),
+      );
+    }
+  }
+
   Future<void> _submit() async {
+    if (!_acceptedPrivacy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte akzeptiere die Datenschutzbedingungen.'),
+        ),
+      );
+      return;
+    }
+
     final email = _emailController.text.trim();
     final username = _usernameController.text.trim();
     final firstName = _firstNameController.text.trim();
@@ -82,7 +107,11 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
           suffixIcon: suffix,
         );
 
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextField(
           controller: _emailController,
@@ -139,7 +168,41 @@ class _RegisterFormState extends ConsumerState<RegisterForm> {
             ),
           ),
         ),
-        const SizedBox(height: 24),
+
+        // NEW: checkbox + link (Material 3-ish)
+        const SizedBox(height: 12),
+        MergeSemantics(
+          child: CheckboxListTile(
+            value: _acceptedPrivacy,
+            onChanged: isLoading
+                ? null
+                : (v) => setState(() => _acceptedPrivacy = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            activeColor: cs.primary,
+            title: Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'Ich akzeptiere die '),
+                  TextSpan(
+                    text: 'Datenschutzbedingungen',
+                    style: tt.bodyMedium?.copyWith(
+                      color: cs.primary,
+                      decoration: TextDecoration.underline,
+                      decorationColor: cs.primary,
+                    ),
+                    recognizer: TapGestureRecognizer()
+                      ..onTap = _openPrivacyPolicy,
+                  ),
+                  const TextSpan(text: '.'),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
