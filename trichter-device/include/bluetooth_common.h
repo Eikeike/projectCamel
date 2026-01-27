@@ -1,0 +1,15 @@
+#ifndef BLUETOOTH_COMMON_H
+#define BLUETOOTH_COMMON_H
+
+#include <zephyr/bluetooth/uuid.h>
+
+#define BT_UUID_CUSTOM_SERVICE_VAL BT_UUID_128_ENCODE(0xaf56d6dd, 0x3c39, 0x4d67, 0x9bbe, 0x4fb04fa327cc)
+
+#define BT_UUID_ARRAY_CHARACTERISTIC_VAL BT_UUID_128_ENCODE( 0xf9d76937, 0xbd70, 0x4e4f, 0xa4da, 0x0b718d5f5b6d)
+
+#define BT_UUID_CALIB_CHAR_VAL BT_UUID_128_ENCODE(0x23de2cad, 0x0fc8, 0x49f4, 0xbbcc, 0x5eb2c9fdb91b)
+
+#define BT_UUID_REMOTE_STATE_CHAR_VAL BT_UUID_128_ENCODE(0x9b6d1c3a, 0x91a2, 0x4f23, 0x8c11, 0x1a2b3c4d5e6f)
+
+
+#endif /* BLUETOOTH_COMMON_H */

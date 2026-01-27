@@ -12,6 +12,8 @@
 #include "bluetooth.h"
 #include "state_machine.h"
 #include "memory.h"
+#include "bluetooth_common.h"
+#include "bluetooth_advertising.h"
 
 #define MAX_TIMESTAMPS          300
 #define CHUNK_SIZE              10
@@ -87,17 +89,7 @@ static uint8_t tx_buffer[sizeof(struct ble_packet_header) + MAX_SDU_SIZE_BYTE];
 static StateID_t g_remote_state;
 bool g_is_valid_calibration_attempt = false;
 
-/* Custom 128-bit UUIDs */
-
-#define BT_UUID_ARRAY_CHARACTERISTIC_VAL \
-    BT_UUID_128_ENCODE( 0xf9d76937, 0xbd70, 0x4e4f, 0xa4da, 0x0b718d5f5b6d)
-
-#define BT_UUID_CALIB_CHAR_VAL \
-BT_UUID_128_ENCODE(0x23de2cad, 0x0fc8, 0x49f4, 0xbbcc, 0x5eb2c9fdb91b)
-
-#define BT_UUID_REMOTE_STATE_CHAR_VAL \
-    BT_UUID_128_ENCODE(0x9b6d1c3a, 0x91a2, 0x4f23, 0x8c11, 0x1a2b3c4d5e6f)
-
+static struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(BT_UUID_CUSTOM_SERVICE_VAL);
 static struct bt_uuid_128 drinking_char_uuid = BT_UUID_INIT_128(BT_UUID_ARRAY_CHARACTERISTIC_VAL);
 static struct bt_uuid_128 time_constant_char_uuid = BT_UUID_INIT_128(BT_UUID_CALIB_CHAR_VAL);
 static struct bt_uuid_128 remote_state_char_uuid = BT_UUID_INIT_128(BT_UUID_REMOTE_STATE_CHAR_VAL);
@@ -278,7 +270,7 @@ void ble_delete_active_connection()
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
-     printk("Disconnected (reason 0x%02x)\n", reason);
+    printk("Disconnected (reason 0x%02x)\n", reason);
     g_is_connected = false;
     g_bulk_service.transmission_active = false;
     k_sem_give(&indication_sem);
@@ -292,6 +284,7 @@ static void disconnected(struct bt_conn *conn, uint8_t reason)
 static void recycled()
 {
     printk("Recycled callback\n");
+    bluetooth_advertising_start_fast();
 }
 
 BT_CONN_CB_DEFINE(conn_callbacks) = {
@@ -307,9 +300,6 @@ int init_ble(uint8_t timer_tick_duration)
     k_work_queue_init(&retry_work);
     k_work_queue_start(&retry_work, retry_work_stack, K_THREAD_STACK_SIZEOF(retry_work_stack), 4, NULL);
     k_work_init(&work, indication_retry_handler);
-
-    // FIX: Init Advertising Work Item
-    k_work_init(&adv_work, adv_work_handler);
 
     err = initialize_and_mount_fs(&fs_ble, NVS_PARTITION_DEVICE_BLE, NVS_PARTITION_OFFSET_BLE, NVS_PARTITION_SIZE_BLE);
     if (err)

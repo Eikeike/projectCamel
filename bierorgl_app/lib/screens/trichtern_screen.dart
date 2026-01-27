@@ -92,17 +92,66 @@ class _TrichternScreenState extends ConsumerState<TrichternScreen> {
         );
       }
 
-      // 2. Handle Failure (transition from calibrating directly to error)
-      if (previous?.deviceStatus == TrichterDeviceStatus.calibrating && 
-          next.deviceStatus == TrichterDeviceStatus.error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Kalibrierung fehlgeschlagen!'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+    if (previous?.deviceStatus == TrichterDeviceStatus.calibrating && 
+        !next.calibrationSuccessTrigger) {
+      
+      // We use a local variable to make the code cleaner and avoid context issues
+      final messenger = ScaffoldMessenger.of(context);
+      final ColorScheme colorScheme = Theme.of(context).colorScheme;
+
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 8), // Longer duration for reading
+          backgroundColor: colorScheme.error,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Kalibrierung fehlgeschlagen!',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold, 
+                  fontSize: 16,
+                  color: colorScheme.onError, // Ensure high contrast
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Für eine erfolgreiche Kalibrierung:',
+                style: TextStyle(color: colorScheme.onError),
+              ),
+              const SizedBox(height: 6),
+              // Using a simple bullet point list
+              Text(
+                '• Starte den Vorgang erneut',
+                softWrap: false, // Disables line breaking
+                overflow: TextOverflow.visible,
+                style: TextStyle(color: colorScheme.onError),
+              ),
+              Text(
+                '• Fülle exakt 500ml in die Bierorgl',
+                softWrap: false, // Disables line breaking
+                overflow: TextOverflow.visible,
+                style: TextStyle(color: colorScheme.onError),
+              ),
+              Text(
+                '• Öffne den Hahn vollständig',
+                softWrap: false, // Disables line breaking
+                overflow: TextOverflow.visible,
+                style: TextStyle(color: colorScheme.onError),
+              ),]
           ),
-        );
-      }
-    });
+          action: SnackBarAction(
+            label: 'VERSTANDEN',
+            textColor: colorScheme.onError,
+            onPressed: () => messenger.hideCurrentSnackBar(),
+          ),
+        ),
+      );
+    }
+    },
+    );
     
     // --- LISTENER (Navigation & Fehler) ---
     // Wir hören hier nur auf spezifische Änderungen für Events

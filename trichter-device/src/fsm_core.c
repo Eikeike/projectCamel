@@ -14,12 +14,77 @@ StateMachine_t g_stateMachine;
 K_THREAD_STACK_DEFINE(state_machine_stack, STATE_MACHINE_THREAD_STACK_SIZE);
 static struct k_thread state_machine_thread_data;
 
+extern uint8_t IdleEntry(void);
+extern uint8_t IdleRun(void);
+extern uint8_t IdleExit(void);
+
+extern uint8_t ReadyEntry(void);
+extern uint8_t ReadyRun(void);
+extern uint8_t ReadyExit(void);
+
+extern uint8_t RunningEntry(void);
+extern uint8_t RunningRun(void);
+extern uint8_t RunningExit(void);
+
+extern uint8_t SendingEntry(void);
+extern uint8_t SendingRun(void);
+extern uint8_t SendingExit(void);
+
+extern uint8_t ErrorEntry(void);
+extern uint8_t ErrorRun(void);
+extern uint8_t ErrorExit(void);
+
+const State_t STATES[NUM_STATES + 1] = {
+    [STATE_IDLE] = {
+        .id = STATE_IDLE,
+        .onEntry = IdleEntry,
+        .runLoop = IdleRun,
+        .onExit = IdleExit,
+        .allowedTransitions = {STATE_RUNNING, STATE_ERROR, STATE_READY, STATE_MAX, STATE_MAX}
+    },
+    [STATE_READY] = {
+        .id = STATE_READY,
+        .onEntry = ReadyEntry,
+        .runLoop = ReadyRun,
+        .onExit = ReadyExit,
+        .allowedTransitions = {STATE_RUNNING, STATE_IDLE, STATE_CALIBRATING, STATE_MAX, STATE_MAX}
+    },
+    [STATE_RUNNING] = {
+        .id = STATE_RUNNING,
+        .onEntry = RunningEntry,
+        .runLoop = RunningRun,
+        .onExit = RunningExit,
+        .allowedTransitions = {STATE_SENDING, STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX}
+    },
+    [STATE_SENDING] = {
+        .id = STATE_SENDING,
+        .onEntry = SendingEntry,
+        .runLoop = SendingRun,
+        .onExit = SendingExit,
+        .allowedTransitions = {STATE_ERROR, STATE_READY, STATE_MAX, STATE_MAX, STATE_MAX}
+    },
+    [STATE_CALIBRATING] = {
+        .id = STATE_CALIBRATING,
+        .onEntry = CalibEntry,
+        .runLoop = CalibRun,
+        .onExit = CalibExit,
+        .allowedTransitions = {STATE_READY, STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX}
+    },
+    [STATE_ERROR] = {
+        .id = STATE_ERROR,
+        .onEntry = ErrorEntry,
+        .runLoop = ErrorRun,
+        .onExit = ErrorExit,
+        .allowedTransitions = {STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX, STATE_MAX}
+    }
+};
+
 
 static uint8_t fsm_transition_internal(StateMachine_t *sm, StateID_t targetState)
 {
     uint8_t ret = ERR_NONE;
     k_mutex_lock(&sm->lock, K_FOREVER);
-    printk("Requested transition from %d to %d\n", sm->current->id, targetState);
+    printk("%s: Requested transition from %d to %d\n", sm->name, sm->current->id, targetState);
     ret = state_machine_transition(sm, targetState);
     k_mutex_unlock(&sm->lock);
 
@@ -76,6 +141,10 @@ void fsm_start()
     g_stateMachine.error = ERR_NONE;
     g_stateMachine.period_ms = FSM_PERIOD_FAST_MS;
     g_stateMachine.requestStateDeferred = STATE_MAX;
+    g_stateMachine.name = "Main FSM";
+    g_stateMachine.states = STATES;
+    g_stateMachine.num_states = NUM_STATES;
+    g_stateMachine.notify = true;
 
     k_thread_create(&state_machine_thread_data, state_machine_stack, K_THREAD_STACK_SIZEOF(state_machine_stack), fsm_main, NULL, NULL, NULL, STATE_MACHINE_THREAD_PRIO, 0, K_NO_WAIT);
 }

@@ -4,76 +4,10 @@
 
 static StateNotifier g_state_notifier;
 
-extern uint8_t IdleEntry(void);
-extern uint8_t IdleRun(void);
-extern uint8_t IdleExit(void);
-
-extern uint8_t ReadyEntry(void);
-extern uint8_t ReadyRun(void);
-extern uint8_t ReadyExit(void);
-
-extern uint8_t RunningEntry(void);
-extern uint8_t RunningRun(void);
-extern uint8_t RunningExit(void);
-
-extern uint8_t SendingEntry(void);
-extern uint8_t SendingRun(void);
-extern uint8_t SendingExit(void);
-
-extern uint8_t ErrorEntry(void);
-extern uint8_t ErrorRun(void);
-extern uint8_t ErrorExit(void);
-
-const State_t STATES[NUM_STATES + 1] = {
-    [STATE_IDLE] = {
-        .id = STATE_IDLE,
-        .onEntry = IdleEntry,
-        .runLoop = IdleRun,
-        .onExit = IdleExit,
-        .allowedTransitions = {STATE_RUNNING, STATE_ERROR, STATE_READY, STATE_MAX, STATE_MAX}
-    },
-    [STATE_READY] = {
-        .id = STATE_READY,
-        .onEntry = ReadyEntry,
-        .runLoop = ReadyRun,
-        .onExit = ReadyExit,
-        .allowedTransitions = {STATE_RUNNING, STATE_IDLE, STATE_CALIBRATING, STATE_MAX, STATE_MAX}
-    },
-    [STATE_RUNNING] = {
-        .id = STATE_RUNNING,
-        .onEntry = RunningEntry,
-        .runLoop = RunningRun,
-        .onExit = RunningExit,
-        .allowedTransitions = {STATE_SENDING, STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX}
-    },
-    [STATE_SENDING] = {
-        .id = STATE_SENDING,
-        .onEntry = SendingEntry,
-        .runLoop = SendingRun,
-        .onExit = SendingExit,
-        .allowedTransitions = {STATE_ERROR, STATE_READY, STATE_MAX, STATE_MAX, STATE_MAX}
-    },
-    [STATE_CALIBRATING] = {
-        .id = STATE_CALIBRATING,
-        .onEntry = CalibEntry,
-        .runLoop = CalibRun,
-        .onExit = CalibExit,
-        .allowedTransitions = {STATE_READY, STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX}
-    },
-    [STATE_ERROR] = {
-        .id = STATE_ERROR,
-        .onEntry = ErrorEntry,
-        .runLoop = ErrorRun,
-        .onExit = ErrorExit,
-        .allowedTransitions = {STATE_ERROR, STATE_MAX, STATE_MAX, STATE_MAX, STATE_MAX}
-    }
-};
-
-
 static uint8_t is_transition_allowed(const State_t *currState, StateID_t targetState)
 {
-    //Error checks
-    if (targetState > NUM_STATES || currState->allowedTransitions == NULL)
+    //Error checks --> targetState within num_states is checked by transition function!
+    if (currState->allowedTransitions == NULL)
     {
         return 0;
     }
@@ -93,8 +27,7 @@ static uint8_t is_transition_allowed(const State_t *currState, StateID_t targetS
 uint8_t state_machine_transition(StateMachine_t *stateMachine, StateID_t targetState)
 {
     //Error Checks
-    
-    if (!stateMachine || !stateMachine->current || targetState > NUM_STATES)
+    if (!stateMachine || !stateMachine->current || targetState > stateMachine->num_states)
     {
         printk("Invalid State request\n");
         return ERR_INVALID_PARAM;
@@ -123,14 +56,17 @@ uint8_t state_machine_transition(StateMachine_t *stateMachine, StateID_t targetS
         {
             printk("WARNING: OnExit of current state has no implementation\n");
         }
-        State_t *next = &STATES[targetState];
+        State_t *next = &stateMachine->states[targetState];
         printk("Going to target state %d\n", next->id);
         stateMachine->current = next;
         ret = next->onEntry();
 
         if ((ret == ERR_NONE || ret == ERR_NO_IMPL) && g_state_notifier != NULL)
         {
-            g_state_notifier(stateMachine->current->id);
+            if (stateMachine->notify)
+            {
+                g_state_notifier(stateMachine->current->id);
+            }
         }
     }
     return ret;
