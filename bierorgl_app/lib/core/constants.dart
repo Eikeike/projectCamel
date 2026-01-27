@@ -8,7 +8,7 @@ class AppConstants {
   static const tokenRefreshPath = '/api/auth/token/refresh/';
   static const String passwordResetPath = '/api/auth/password/reset/';
   static const String privacyURL =
-      'https://github.com/Eikeike/projectCamel/blob/2c67af259de0bc9ba2f45554471a0f58d585b35f/PRIVACY.md';
+      'https://github.com/Eikeike/projectCamel/blob/main/PRIVACY.md';
   static const bleDeviceId = 'ABC-123';
   static const autoSyncDebounceIntervalSeconds = 7;
 
