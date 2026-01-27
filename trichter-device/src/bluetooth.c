@@ -258,6 +258,7 @@ static void connected(struct bt_conn *conn, uint8_t err)
     }
     g_is_connected = true;
     g_bulk_service.current_conn = bt_conn_ref(conn);
+    bluetooth_advertising_stop();
 }
 
 void ble_delete_active_connection()

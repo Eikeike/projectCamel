@@ -72,9 +72,28 @@ class TrichterConnectionService extends Notifier<TrichterConnectionState> {
 
   @override
   TrichterConnectionState build() {
-    ref.keepAlive();
-    ref.onDispose(_disposeInternal);
-    return const TrichterConnectionState();
+  ref.keepAlive();
+  
+    // GLOBAL LISTENER: This stays alive as long as the Provider exists.
+    // It's the most "pro" way to ensure you never miss a disconnect.
+    final globalSub = FlutterBluePlus.events.onConnectionStateChanged.listen((event) {
+    final device = event.device;
+    final connectionState = event.connectionState;
+
+    // Check if this is OUR device and if it just disconnected
+    if (device.remoteId == state.connectedDevice?.remoteId && 
+        connectionState == BluetoothConnectionState.disconnected) {
+      print("Global Listener: Device disconnected!");
+      _handleDisconnect();
+    }
+  });
+
+  ref.onDispose(() {
+    globalSub.cancel();
+    _disposeInternal();
+  });
+
+  return const TrichterConnectionState();
   }
 
  void _disposeInternal() {
