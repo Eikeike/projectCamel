@@ -4,7 +4,7 @@ config BOARD
     default "pilsplatine"
 endif
 
-if BOARD_PILSPLATINE_BUTTONLESS
+if BOARD_PILSPLATINE_NRF52832_BUTTONLESS
 config BOARD
     default "pilsplatinebuttonless"
 endif

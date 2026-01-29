@@ -4,3 +4,5 @@ board:
   vendor: meppenSouthEngineering
   socs:
   - name: nrf52832
+    variants:
+    - name: buttonless

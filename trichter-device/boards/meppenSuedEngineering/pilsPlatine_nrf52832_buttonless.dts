@@ -1,0 +1,8 @@
+/* pilsplatine_nrf52832_buttonless.dts */
+/dts-v1/;
+#include "pilsplatine_common.dtsi"
+
+
+/ {
+    /* override / delete buttons here */
+};
