@@ -7,7 +7,7 @@ config BOARD_PILSPLATINE
 	bool "pilsPlatine NRF52832 (With buttons)"
 	select SOC_NRF52832_QFAA
 
-config BOARD_PILSPLATINE_BUTTONLESS
+config BOARD_PILSPLATINE_NRF52832_BUTTONLESS
     bool "pilsPlatine NRF52832 (Buttonless)"
     select SOC_NRF52832_QFAA
     select BUTTONLESS

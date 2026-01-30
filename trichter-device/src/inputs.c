@@ -58,6 +58,7 @@ static void ready_button_pressed_handler()
 */
 void debounce_work_handler(struct k_work *work)
 {
+    #ifndef CONFIG_BUTTONLESS
     uint8_t level = gpio_pin_get_dt(&button_ready);
     if (level == g_ready_button.button_level_stable) return;
 
@@ -85,16 +86,19 @@ void debounce_work_handler(struct k_work *work)
             input_request_pairing_mode();
         }
     }
+    #endif
 }
 
 
 static void long_click_work_handler(struct k_work *work)
 {
+    #ifndef CONFIG_BUTTONLESS
     if (1 == g_ready_button.button_level_stable) {
         g_ready_button.long_click_fired = true;
         g_ready_button.double_click_pending = false;
         input_request_state_calibrating();
     }
+    #endif
 }
 
 
@@ -115,7 +119,7 @@ uint8_t setup_isr_for_gpio_in(const struct gpio_dt_spec *input, struct gpio_call
 {
 	nrfx_err_t err;
 
-	err = gpio_pin_configure_dt(	input, GPIO_INPUT);
+	err = gpio_pin_configure_dt(input, GPIO_INPUT);
 	if (err) {
 		printk("ERROR: GPIO input could not be set");
 		return err;
@@ -191,20 +195,23 @@ static void setup_ppi_for_sensor(const struct gpio_dt_spec *sensor)
     nrfx_gppi_conn_enable(ppi_channel);
 }
 
-
+#ifndef CONFIG_BUTTONLESS
 void ready_button_isr(const struct device *dev, struct gpio_callback *cb,
 		    uint32_t pins)
 {
 	printk("Button pressed at %d, level %d...\n", k_cycle_get_32(), gpio_pin_get_dt(&button_ready));
     k_work_reschedule(&debounce_work, READY_DEBOUNCE_PERIOD_MS);
 }
+#endif
 
 
 
 uint8_t init_gpio_inputs()
 {
     int ret = 0;
+    #ifndef CONFIG_BUTTONLESS
     ret = setup_isr_for_gpio_in(&button_ready, &button_cb_data_1, ready_button_isr, GPIO_INT_EDGE_BOTH);
+    #endif
 	ret |= setup_isr_for_gpio_in(&button_test_sensor, &button_cb_data_2, sensor_triggered_isr, GPIO_INT_EDGE_RISING); //sensor triggered ISR in runtime.h
 	setup_ppi_for_sensor(&button_test_sensor);
 
@@ -220,6 +227,7 @@ uint8_t init_gpio_inputs()
 
 void init_gpio_outputs()
 {
+    #ifndef CONFIG_BUTTONLESS
     int ret = 0;
 	if (led.port && !gpio_is_ready_dt(&led))
     {
@@ -238,5 +246,6 @@ void init_gpio_outputs()
             gpio_pin_set_dt(&led, 1);
 		}
 	}
+    #endif
 }
 

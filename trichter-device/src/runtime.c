@@ -198,7 +198,9 @@ void ble_remote_state_dispatch(RemoteState state)
 uint8_t IdleEntry(void)
 {
 	tm1637_display_off();
-	gpio_pin_set_dt(&led, 1);
+	#ifndef CONFIG_BUTTONLESS
+		gpio_pin_set_dt(&led, 1);
+	#endif
 	g_stateMachine.period_ms = FSM_PERIOD_SLOW_MS;
 	return ERR_NONE;
 };
@@ -238,8 +240,8 @@ uint8_t ReadyEntry(void)
 
 uint8_t ReadyRun(void)
 {
-	#ifdef CONFIG_BUTTONLESS
-	if (!is_ble_connected())
+	#ifndef CONFIG_BUTTONLESS
+	if (!is_ble_connected() && !bluetooth_advertising_is_active())
 	{
 		bluetooth_advertising_start_fast();
 	} else {
@@ -377,7 +379,7 @@ uint8_t CalibExit(void)
 	nrf_timer_task_trigger(NRF_TIMER2, NRF_TIMER_TASK_STOP);
 	bool valid_calib_attempt = g_valid_calibration && global_calibration_value <= 400 && global_calibration_value >= 100;
 	g_calib_attempt_notifier(valid_calib_attempt);
-	if (g_valid_calibration)
+	if (valid_calib_attempt)
 	{
 		save_counter_ram_to_rom();
 	}
