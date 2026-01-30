@@ -354,7 +354,7 @@ class _LocationsCard extends StatelessWidget {
                 // --- ÄNDERUNG: Einfachere TileLayer Struktur ---
                 TileLayer(
                   urlTemplate: mapUrl,
-                  userAgentPackageName: 'com.example.project_camel',
+                  userAgentPackageName: 'com.tim.bierorgl',
                   // WICHTIG für CartoDB:
                   subdomains: const ['a', 'b', 'c', 'd'],
                 ),

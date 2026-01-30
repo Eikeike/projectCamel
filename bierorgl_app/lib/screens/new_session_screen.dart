@@ -526,7 +526,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                     // TileLayer (Jetzt ohne ColorFiltered, dafür mit CartoDB URL)
                     TileLayer(
                       urlTemplate: mapUrl,
-                      userAgentPackageName: 'com.example.project_camel',
+                      userAgentPackageName: 'com.tim.bierorgl',
                       subdomains: const ['a', 'b', 'c', 'd'],
                     ),
 

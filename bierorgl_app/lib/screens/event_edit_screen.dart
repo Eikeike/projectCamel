@@ -409,7 +409,7 @@ class _EventEditScreenState extends ConsumerState<EventEditScreen> {
                   children: [
                     TileLayer(
                       urlTemplate: mapUrl,
-                      userAgentPackageName: 'com.example.project_camel',
+                      userAgentPackageName: 'com.tim.bierorgl',
                       subdomains: const ['a', 'b', 'c', 'd'],
                     ),
                     MarkerLayer(
