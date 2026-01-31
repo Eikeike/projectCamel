@@ -150,7 +150,6 @@ class _NewEventScreenState extends ConsumerState<NewEventScreen> {
       EventSortOrder.alphabetical => 'A-Z',
       EventSortOrder.newest => 'Neueste',
       EventSortOrder.oldest => 'Älteste',
-      EventSortOrder.dateFrom => 'Datum',
     };
   }
 
@@ -176,7 +175,6 @@ class _NewEventScreenState extends ConsumerState<NewEventScreen> {
         result.sort((a, b) => (b.dateFrom ?? DateTime(0)).compareTo(a.dateFrom ?? DateTime(0)));
         break;
       case EventSortOrder.oldest:
-      case EventSortOrder.dateFrom:
         result.sort((a, b) => (a.dateFrom ?? DateTime(0)).compareTo(b.dateFrom ?? DateTime(0)));
         break;
     }

@@ -1,10 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum EventSortOrder {
-  alphabetical,
   newest,
   oldest,
-  dateFrom,
+  alphabetical,
 }
 
 /// Immutables Modell für den Filter-Status der Events
@@ -16,9 +15,6 @@ class EventFilters {
     this.sortOrder = EventSortOrder.newest,
     this.searchQuery = '',
   });
-
-  /// Prüft, ob ein Filter aktiv ist (für den "Reset"-Button in der UI)
-  bool get hasActive => searchQuery.isNotEmpty || sortOrder != EventSortOrder.newest;
 
   EventFilters copyWith({EventSortOrder? sortOrder, String? searchQuery}) {
     return EventFilters(
