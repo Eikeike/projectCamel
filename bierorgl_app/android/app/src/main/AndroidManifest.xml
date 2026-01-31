@@ -12,6 +12,12 @@
     <!-- HINZUGEFÜGT: Für ungefähren Standort, wird von geolocator empfohlen -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <supports-screens
+    android:smallScreens="true"
+    android:normalScreens="true"
+    android:largeScreens="false"
+    android:xlargeScreens="false" />
+
     <application
         android:label="BIERORGL"
         android:name="${applicationName}"
